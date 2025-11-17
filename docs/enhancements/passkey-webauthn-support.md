@@ -638,6 +638,507 @@ test('register passkey', async ({ page }) => {
 
 ---
 
+## User Registration & Enrollment
+
+### Critical Design Decision: How Do Users Register?
+
+Since Dex is primarily an **identity federation layer** (OIDC provider), not a traditional "sign-up" service, user registration requires careful consideration.
+
+### Current Dex Behavior
+
+**Dex does NOT provide user registration by default**:
+- Users authenticate via **connectors** (GitHub, LDAP, SAML, etc.)
+- The **local connector** (password database) requires pre-provisioned users
+- No built-in self-service registration UI
+
+### Option B Approach: Enhanced Local Connector with Registration
+
+For passkeys to work effectively, we need **self-service registration**. Here are the registration strategies:
+
+---
+
+### Registration Strategy 1: Platform-Managed Registration (Recommended for Enopax)
+
+**Architecture**: The **Enopax Platform** (Next.js app) handles user registration, then creates the user in Dex via gRPC API.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                  PLATFORM-MANAGED REGISTRATION              │
+└─────────────────────────────────────────────────────────────┘
+
+User                Enopax Platform          Dex Server
+ |                       |                        |
+ |  1. Visit             |                        |
+ | platform.enopax.io/   |                        |
+ |    signup             |                        |
+ ├──────────────────────>|                        |
+ |                       |                        |
+ |  2. Registration form |                        |
+ |  (email, name,        |                        |
+ |   choose auth method) |                        |
+ |<──────────────────────┤                        |
+ |                       |                        |
+ |  3. Submit            |                        |
+ ├──────────────────────>|                        |
+ |                       |                        |
+ |                       |  4. Validate &         |
+ |                       |     Create user        |
+ |                       |     (gRPC API)         |
+ |                       ├───────────────────────>|
+ |                       |                        |
+ |                       |  5. User created       |
+ |                       |<───────────────────────┤
+ |                       |                        |
+ |                       |  6. Register passkey/  |
+ |                       |     password via Dex   |
+ |                       ├───────────────────────>|
+ |                       |                        |
+ |  7. Account ready     |                        |
+ |<──────────────────────┤                        |
+ |                       |                        |
+ |  8. Redirect to login |                        |
+ |  (OAuth flow)         |                        |
+ ├──────────────────────>├───────────────────────>|
+```
+
+**Pros**:
+- ✅ **Full control** over registration UX
+- ✅ **Integration** with Enopax platform logic (org creation, team setup)
+- ✅ **Customizable** registration fields
+- ✅ **Billing integration** (can require payment during signup)
+- ✅ **Email verification** before Dex account creation
+
+**Cons**:
+- ❌ Requires gRPC API for user management
+- ❌ Platform becomes source of truth for user lifecycle
+- ❌ More complexity (two systems)
+
+**Implementation**:
+```go
+// Enopax Platform (Next.js API Route)
+// POST /api/auth/register
+async function registerUser(req, res) {
+  const { email, name, authMethod } = req.body;
+
+  // 1. Validate input
+  if (!isValidEmail(email)) {
+    return res.status(400).json({ error: 'Invalid email' });
+  }
+
+  // 2. Check if user exists in Platform DB
+  const existingUser = await prisma.user.findUnique({ where: { email } });
+  if (existingUser) {
+    return res.status(409).json({ error: 'User already exists' });
+  }
+
+  // 3. Send verification email
+  const verificationToken = generateToken();
+  await sendVerificationEmail(email, verificationToken);
+
+  // 4. Store pending user
+  await prisma.pendingUser.create({
+    data: { email, name, authMethod, verificationToken }
+  });
+
+  return res.json({ message: 'Check your email to verify' });
+}
+
+// After email verification
+async function verifyAndCreateUser(token) {
+  const pendingUser = await prisma.pendingUser.findUnique({
+    where: { verificationToken: token }
+  });
+
+  // 5. Create user in Dex via gRPC
+  const dexClient = createDexClient();
+  const dexUser = await dexClient.createUser({
+    email: pendingUser.email,
+    username: pendingUser.email,
+    displayName: pendingUser.name,
+  });
+
+  // 6. Create user in Platform DB
+  await prisma.user.create({
+    data: {
+      id: dexUser.id,
+      email: pendingUser.email,
+      name: pendingUser.name,
+    }
+  });
+
+  // 7. Redirect to auth method setup
+  if (pendingUser.authMethod === 'passkey') {
+    return { redirect: '/setup-passkey' };
+  } else if (pendingUser.authMethod === 'password') {
+    return { redirect: '/setup-password' };
+  }
+}
+```
+
+---
+
+### Registration Strategy 2: Dex Self-Service Registration (Alternative)
+
+**Architecture**: Dex provides its own registration UI and handles user creation directly.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                  DEX SELF-SERVICE REGISTRATION              │
+└─────────────────────────────────────────────────────────────┘
+
+User                     Dex Server
+ |                           |
+ |  1. Visit                 |
+ | auth.enopax.io/register   |
+ ├──────────────────────────>|
+ |                           |
+ |  2. Registration form     |
+ |  (built into Dex)         |
+ |<──────────────────────────┤
+ |                           |
+ |  3. Submit                |
+ | (email, name, choose      |
+ |  password/passkey)        |
+ ├──────────────────────────>|
+ |                           |
+ |                           |  4. Create user
+ |                           |     in storage
+ |                           |
+ |  5. Setup auth method     |
+ |  (password or passkey)    |
+ |<──────────────────────────┤
+ |                           |
+ |  6. Complete setup        |
+ ├──────────────────────────>|
+ |                           |
+ |  7. Redirect to OAuth     |
+ |     client (Platform)     |
+ |<──────────────────────────┤
+```
+
+**Pros**:
+- ✅ **Self-contained** (Dex handles everything)
+- ✅ **Simpler** for Dex-only deployments
+- ✅ **No gRPC dependency** from Platform
+
+**Cons**:
+- ❌ **Less control** over registration UX
+- ❌ **Platform doesn't know** about new users until first login
+- ❌ **No email verification** (unless built into Dex)
+- ❌ **No integration** with Platform onboarding
+
+**Implementation**:
+- Add `/register` endpoint to Dex
+- Create registration UI templates
+- Handle user creation in storage backend
+- Webhook/event system to notify Platform (optional)
+
+---
+
+### Recommended Registration Flow for Enopax (Option B)
+
+**Hybrid Approach**: Platform-initiated, Dex-completed
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│             RECOMMENDED: HYBRID REGISTRATION                │
+└─────────────────────────────────────────────────────────────┘
+
+Step 1: Platform Handles Signup
+  - User visits platform.enopax.io/signup
+  - User enters email, name, organisation details
+  - Platform validates and sends verification email
+  - User clicks verification link
+
+Step 2: Platform Creates User Shell
+  - Platform creates user in Platform DB
+  - Platform creates user in Dex via gRPC (minimal info)
+  - User record exists but has NO auth method yet
+
+Step 3: Redirect to Dex for Auth Method Setup
+  - Platform generates secure token
+  - Redirects to: auth.enopax.io/setup-auth?token=...
+  - Dex validates token with Platform (API call)
+
+Step 4: User Chooses Auth Method
+  - Dex shows: "Choose how to log in"
+    ☐ Set a password
+    ☐ Register a passkey
+    ☐ Both (password + passkey for 2FA)
+
+Step 5: User Completes Auth Setup
+  - If passkey: WebAuthn registration ceremony
+  - If password: Set password (with strength requirements)
+  - If both: Set password first, then register passkey
+
+Step 6: Redirect Back to Platform
+  - Dex redirects to Platform with OAuth code
+  - User logs in automatically
+  - Platform onboarding flow begins
+```
+
+**Code Example**:
+
+```typescript
+// Platform: /api/auth/signup
+export async function POST(req: Request) {
+  const { email, name, orgName } = await req.json();
+
+  // 1. Validate email
+  if (await userExists(email)) {
+    return Response.json({ error: 'Email already registered' }, { status: 409 });
+  }
+
+  // 2. Create pending signup
+  const token = crypto.randomBytes(32).toString('hex');
+  await prisma.pendingSignup.create({
+    data: { email, name, orgName, token, expiresAt: addMinutes(new Date(), 30) }
+  });
+
+  // 3. Send verification email
+  await sendEmail({
+    to: email,
+    subject: 'Verify your Enopax account',
+    body: `Click here: https://platform.enopax.io/verify?token=${token}`
+  });
+
+  return Response.json({ message: 'Check your email' });
+}
+
+// Platform: /api/auth/verify
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const token = searchParams.get('token');
+
+  const pending = await prisma.pendingSignup.findUnique({ where: { token } });
+  if (!pending || pending.expiresAt < new Date()) {
+    return Response.json({ error: 'Invalid or expired token' }, { status: 400 });
+  }
+
+  // 1. Create user in Platform DB
+  const user = await prisma.user.create({
+    data: {
+      email: pending.email,
+      name: pending.name,
+      emailVerified: true,
+    }
+  });
+
+  // 2. Create user in Dex via gRPC
+  const dexClient = createDexClient();
+  await dexClient.createUser({
+    email: pending.email,
+    username: pending.email,
+    displayName: pending.name,
+  });
+
+  // 3. Generate setup token for Dex
+  const setupToken = signJWT({ userId: user.id, email: user.email });
+
+  // 4. Redirect to Dex auth setup
+  return Response.redirect(
+    `https://auth.enopax.io/setup-auth?token=${setupToken}&redirect_uri=${encodeURIComponent('https://platform.enopax.io/welcome')}`
+  );
+}
+```
+
+```go
+// Dex: /setup-auth endpoint
+func (s *Server) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
+    token := r.URL.Query().Get("token")
+    redirectURI := r.URL.Query().Get("redirect_uri")
+
+    // 1. Validate token with Platform
+    user, err := s.validateSetupToken(token)
+    if err != nil {
+        http.Error(w, "Invalid token", http.StatusUnauthorized)
+        return
+    }
+
+    // 2. Show auth method selection UI
+    if r.Method == "GET" {
+        s.templates.Render(w, "setup-auth.html", map[string]interface{}{
+            "Email": user.Email,
+            "Name":  user.Name,
+            "Token": token,
+        })
+        return
+    }
+
+    // 3. Handle auth method setup
+    authMethod := r.FormValue("method")
+    switch authMethod {
+    case "password":
+        password := r.FormValue("password")
+        if err := s.setUserPassword(user.ID, password); err != nil {
+            http.Error(w, err.Error(), http.StatusBadRequest)
+            return
+        }
+    case "passkey":
+        // Redirect to passkey registration flow
+        http.Redirect(w, r, "/passkey/register/begin?user_id="+user.ID, http.StatusSeeOther)
+        return
+    case "both":
+        // Set password first, then passkey
+        password := r.FormValue("password")
+        if err := s.setUserPassword(user.ID, password); err != nil {
+            http.Error(w, err.Error(), http.StatusBadRequest)
+            return
+        }
+        http.Redirect(w, r, "/passkey/register/begin?user_id="+user.ID, http.StatusSeeOther)
+        return
+    }
+
+    // 4. Redirect back to Platform
+    http.Redirect(w, r, redirectURI, http.StatusSeeOther)
+}
+```
+
+---
+
+### Registration UI Flow
+
+**Platform Signup Page** (`platform.enopax.io/signup`):
+```html
+┌─────────────────────────────────────────────────────────┐
+│              Create your Enopax account                 │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  Email                                                  │
+│  ┌──────────────────────────────────────┐              │
+│  │ you@company.com                      │              │
+│  └──────────────────────────────────────┘              │
+│                                                         │
+│  Full Name                                              │
+│  ┌──────────────────────────────────────┐              │
+│  │ Alice Developer                      │              │
+│  └──────────────────────────────────────┘              │
+│                                                         │
+│  Organisation Name                                      │
+│  ┌──────────────────────────────────────┐              │
+│  │ Acme Corp                            │              │
+│  └──────────────────────────────────────┘              │
+│                                                         │
+│  ☑ I agree to Terms of Service                         │
+│                                                         │
+│  ┌──────────────────────────────────────┐              │
+│  │   Create Account                     │              │
+│  └──────────────────────────────────────┘              │
+│                                                         │
+│  Already have an account? Log in                       │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Dex Auth Setup Page** (`auth.enopax.io/setup-auth`):
+```html
+┌─────────────────────────────────────────────────────────┐
+│         Welcome, alice@company.com!                     │
+│         Choose how you want to log in                   │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  🔐  Passkey (Recommended)                              │
+│      Use your fingerprint, face, or security key       │
+│      ┌──────────────────────────────────────┐          │
+│      │   Set up Passkey                     │          │
+│      └──────────────────────────────────────┘          │
+│      ✓ Faster login                                     │
+│      ✓ More secure                                      │
+│      ✓ No password to remember                          │
+│                                                         │
+│  ─────────────── OR ────────────────                   │
+│                                                         │
+│  🔑  Password                                           │
+│      Traditional password-based login                   │
+│      ┌──────────────────────────────────────┐          │
+│      │   Set up Password                    │          │
+│      └──────────────────────────────────────┘          │
+│                                                         │
+│  ─────────────── OR ────────────────                   │
+│                                                         │
+│  🔒  Both (Most Secure)                                 │
+│      Password + Passkey for two-factor authentication  │
+│      ┌──────────────────────────────────────┐          │
+│      │   Set up Both                        │          │
+│      └──────────────────────────────────────┘          │
+│      ✓ Strongest security                               │
+│      ✓ Required for admin accounts                      │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+### gRPC API Requirements
+
+To support Platform-managed registration, Dex needs these gRPC endpoints:
+
+```protobuf
+// User management
+service Dex {
+  // Create a new user (without auth method)
+  rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
+
+  // Set password for a user
+  rpc SetPassword(SetPasswordRequest) returns (SetPasswordResponse);
+
+  // Register passkey for a user
+  rpc RegisterPasskey(RegisterPasskeyRequest) returns (RegisterPasskeyResponse);
+
+  // Get user by email
+  rpc GetUserByEmail(GetUserByEmailRequest) returns (GetUserByEmailResponse);
+
+  // Update user details
+  rpc UpdateUser(UpdateUserRequest) returns (UpdateUserResponse);
+
+  // Delete user
+  rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse);
+}
+
+message CreateUserRequest {
+  string email = 1;
+  string username = 2;
+  string display_name = 3;
+  bool email_verified = 4;
+}
+
+message CreateUserResponse {
+  string user_id = 1;
+}
+```
+
+---
+
+### Email Verification Best Practices
+
+**Why Email Verification Matters for Passkeys**:
+1. **Prevent account takeover**: Ensure user owns the email
+2. **Passkey binding**: Passkeys should be bound to verified identities
+3. **Recovery**: Email is the recovery method if passkey is lost
+4. **Trust**: Verified emails can receive magic links
+
+**Implementation**:
+```typescript
+// Platform: Email verification flow
+async function sendVerificationEmail(email: string, token: string) {
+  await sendEmail({
+    to: email,
+    subject: 'Verify your Enopax account',
+    html: `
+      <h1>Welcome to Enopax!</h1>
+      <p>Click the link below to verify your email and complete registration:</p>
+      <a href="https://platform.enopax.io/verify?token=${token}">
+        Verify Email
+      </a>
+      <p>This link expires in 30 minutes.</p>
+      <p>If you didn't create an account, you can safely ignore this email.</p>
+    `
+  });
+}
+```
+
+---
+
 ## Migration Path
 
 ### For Existing Users
@@ -649,9 +1150,15 @@ test('register passkey', async ({ page }) => {
 4. Next login: option to use passkey OR password
 
 **Scenario 2: New Users (Passkey-Only)**
-1. User chooses "Sign up with passkey"
-2. Register passkey during account creation
+1. User completes Platform signup
+2. User chooses "Set up Passkey" during auth setup
 3. No password set (fully passwordless)
+
+**Scenario 3: New Users (2FA from Day 1)**
+1. User completes Platform signup
+2. User chooses "Both" during auth setup
+3. Sets password first, then registers passkey
+4. All future logins require both factors
 
 ### Configuration
 
