@@ -17,10 +17,10 @@ import (
 	"github.com/dexidp/dex/storage"
 	"github.com/dexidp/dex/storage/ent"
 	"github.com/dexidp/dex/storage/etcd"
+	"github.com/dexidp/dex/storage/file"
 	"github.com/dexidp/dex/storage/kubernetes"
 	"github.com/dexidp/dex/storage/memory"
 	"github.com/dexidp/dex/storage/sql"
-	"github.com/dexidp/dex/storage/yamlfile"
 )
 
 // Config is the config format for the main application.
@@ -274,7 +274,7 @@ var (
 	_ StorageConfig = (*ent.SQLite3)(nil)
 	_ StorageConfig = (*ent.Postgres)(nil)
 	_ StorageConfig = (*ent.MySQL)(nil)
-	_ StorageConfig = (*yamlfile.Config)(nil)
+	_ StorageConfig = (*file.Config)(nil)
 )
 
 func getORMBasedSQLStorage(normal, entBased StorageConfig) func() StorageConfig {
@@ -314,7 +314,7 @@ var storages = map[string]func() StorageConfig{
 	"sqlite3":    getORMBasedSQLStorage(&sql.SQLite3{}, &ent.SQLite3{}),
 	"postgres":   getORMBasedSQLStorage(&sql.Postgres{}, &ent.Postgres{}),
 	"mysql":      getORMBasedSQLStorage(&sql.MySQL{}, &ent.MySQL{}),
-	"yamlfile":   func() StorageConfig { return new(yamlfile.Config) },
+	"file":       func() StorageConfig { return new(file.Config) },
 }
 
 // UnmarshalJSON allows Storage to implement the unmarshaler interface to

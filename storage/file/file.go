@@ -1,8 +1,9 @@
-// Package yamlfile provides a file-based YAML implementation of the storage interface.
-package yamlfile
+// Package file provides a file-based JSON implementation of the storage interface.
+package file
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -12,16 +13,14 @@ import (
 	"sync"
 	"time"
 
-	"gopkg.in/yaml.v3"
-
 	"github.com/dexidp/dex/storage"
 )
 
-var _ storage.Storage = (*yamlFileStorage)(nil)
+var _ storage.Storage = (*fileStorage)(nil)
 
 // Config holds the configuration for file-based storage.
 type Config struct {
-	DataDir string `yaml:"dataDir"`
+	DataDir string `json:"dataDir"`
 }
 
 // Open creates a new file-based storage backend.
@@ -35,7 +34,7 @@ func (c *Config) Open(logger *slog.Logger) (storage.Storage, error) {
 		return nil, fmt.Errorf("failed to create data directory: %w", err)
 	}
 
-	s := &yamlFileStorage{
+	s := &fileStorage{
 		dataDir: c.DataDir,
 		logger:  logger,
 	}
@@ -66,7 +65,7 @@ func (c *Config) Open(logger *slog.Logger) (storage.Storage, error) {
 	return s, nil
 }
 
-type yamlFileStorage struct {
+type fileStorage struct {
 	dataDir string
 	mu      sync.RWMutex
 	logger  *slog.Logger
@@ -74,25 +73,25 @@ type yamlFileStorage struct {
 
 // Helper functions
 
-func (s *yamlFileStorage) writeFile(dir, filename string, data interface{}) error {
+func (s *fileStorage) writeFile(dir, filename string, data interface{}) error {
 	path := filepath.Join(s.dataDir, dir, filename)
 
-	yamlData, err := yaml.Marshal(data)
+	jsonData, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
-		return fmt.Errorf("failed to marshal YAML: %w", err)
+		return fmt.Errorf("failed to marshal JSON: %w", err)
 	}
 
-	if err := os.WriteFile(path, yamlData, 0600); err != nil {
+	if err := os.WriteFile(path, jsonData, 0600); err != nil {
 		return fmt.Errorf("failed to write file: %w", err)
 	}
 
 	return nil
 }
 
-func (s *yamlFileStorage) readFile(dir, filename string, data interface{}) error {
+func (s *fileStorage) readFile(dir, filename string, data interface{}) error {
 	path := filepath.Join(s.dataDir, dir, filename)
 
-	yamlData, err := os.ReadFile(path)
+	jsonData, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return storage.ErrNotFound
@@ -100,14 +99,14 @@ func (s *yamlFileStorage) readFile(dir, filename string, data interface{}) error
 		return fmt.Errorf("failed to read file: %w", err)
 	}
 
-	if err := yaml.Unmarshal(yamlData, data); err != nil {
-		return fmt.Errorf("failed to unmarshal YAML: %w", err)
+	if err := json.Unmarshal(jsonData, data); err != nil {
+		return fmt.Errorf("failed to unmarshal JSON: %w", err)
 	}
 
 	return nil
 }
 
-func (s *yamlFileStorage) deleteFile(dir, filename string) error {
+func (s *fileStorage) deleteFile(dir, filename string) error {
 	path := filepath.Join(s.dataDir, dir, filename)
 
 	if err := os.Remove(path); err != nil {
@@ -120,13 +119,13 @@ func (s *yamlFileStorage) deleteFile(dir, filename string) error {
 	return nil
 }
 
-func (s *yamlFileStorage) fileExists(dir, filename string) bool {
+func (s *fileStorage) fileExists(dir, filename string) bool {
 	path := filepath.Join(s.dataDir, dir, filename)
 	_, err := os.Stat(path)
 	return err == nil
 }
 
-func (s *yamlFileStorage) listFiles(dir string, result interface{}) error {
+func (s *fileStorage) listFiles(dir string, result interface{}) error {
 	dirPath := filepath.Join(s.dataDir, dir)
 
 	_, err := os.ReadDir(dirPath)
@@ -140,12 +139,12 @@ func (s *yamlFileStorage) listFiles(dir string, result interface{}) error {
 }
 
 // Close implements storage.Storage.
-func (s *yamlFileStorage) Close() error {
+func (s *fileStorage) Close() error {
 	return nil
 }
 
 // GarbageCollect implements storage.Storage.
-func (s *yamlFileStorage) GarbageCollect(ctx context.Context, now time.Time) (result storage.GCResult, err error) {
+func (s *fileStorage) GarbageCollect(ctx context.Context, now time.Time) (result storage.GCResult, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -210,11 +209,11 @@ func (s *yamlFileStorage) GarbageCollect(ctx context.Context, now time.Time) (re
 
 // Password (User) operations
 
-func (s *yamlFileStorage) CreatePassword(ctx context.Context, p storage.Password) error {
+func (s *fileStorage) CreatePassword(ctx context.Context, p storage.Password) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	filename := fmt.Sprintf("%s.yaml", p.UserID)
+	filename := fmt.Sprintf("%s.json", p.UserID)
 
 	if s.fileExists("passwords", filename) {
 		return storage.ErrAlreadyExists
@@ -223,39 +222,67 @@ func (s *yamlFileStorage) CreatePassword(ctx context.Context, p storage.Password
 	return s.writeFile("passwords", filename, p)
 }
 
-func (s *yamlFileStorage) GetPassword(ctx context.Context, email string) (storage.Password, error) {
+func (s *fileStorage) GetPassword(ctx context.Context, email string) (storage.Password, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	lowerEmail := strings.ToLower(email)
+	s.logger.Info("GetPassword called", "email", email, "lowerEmail", lowerEmail)
 
 	// Need to scan all password files to find by email
-	files, err := os.ReadDir(filepath.Join(s.dataDir, "passwords"))
+	passwordsPath := filepath.Join(s.dataDir, "passwords")
+	files, err := os.ReadDir(passwordsPath)
 	if err != nil {
+		s.logger.Error("failed to read passwords directory", "path", passwordsPath, "error", err)
 		return storage.Password{}, storage.ErrNotFound
 	}
+
+	s.logger.Info("scanning password files", "count", len(files))
 
 	for _, file := range files {
 		var p storage.Password
 		if err := s.readFile("passwords", file.Name(), &p); err != nil {
+			s.logger.Warn("failed to read password file", "file", file.Name(), "error", err)
 			continue
 		}
 
+		s.logger.Debug("checking password file", "file", file.Name(), "email", p.Email, "lowerEmail", strings.ToLower(p.Email), "match", strings.ToLower(p.Email) == lowerEmail)
+
 		if strings.ToLower(p.Email) == lowerEmail {
+			s.logger.Info("password found", "email", email, "file", file.Name())
 			return p, nil
 		}
 	}
 
+	s.logger.Warn("password not found", "email", email)
 	return storage.Password{}, storage.ErrNotFound
 }
 
-func (s *yamlFileStorage) UpdatePassword(ctx context.Context, email string, updater func(p storage.Password) (storage.Password, error)) error {
+func (s *fileStorage) UpdatePassword(ctx context.Context, email string, updater func(p storage.Password) (storage.Password, error)) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	p, err := s.GetPassword(ctx, email)
+	// Don't call GetPassword (would cause deadlock), scan directly instead
+	lowerEmail := strings.ToLower(email)
+	files, err := os.ReadDir(filepath.Join(s.dataDir, "passwords"))
 	if err != nil {
-		return err
+		return storage.ErrNotFound
+	}
+
+	var p storage.Password
+	var found bool
+	for _, file := range files {
+		if err := s.readFile("passwords", file.Name(), &p); err != nil {
+			continue
+		}
+		if strings.ToLower(p.Email) == lowerEmail {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return storage.ErrNotFound
 	}
 
 	updated, err := updater(p)
@@ -263,24 +290,42 @@ func (s *yamlFileStorage) UpdatePassword(ctx context.Context, email string, upda
 		return err
 	}
 
-	filename := fmt.Sprintf("%s.yaml", updated.UserID)
+	filename := fmt.Sprintf("%s.json", updated.UserID)
 	return s.writeFile("passwords", filename, updated)
 }
 
-func (s *yamlFileStorage) DeletePassword(ctx context.Context, email string) error {
+func (s *fileStorage) DeletePassword(ctx context.Context, email string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	p, err := s.GetPassword(ctx, email)
+	// Don't call GetPassword (would cause deadlock), scan directly instead
+	lowerEmail := strings.ToLower(email)
+	files, err := os.ReadDir(filepath.Join(s.dataDir, "passwords"))
 	if err != nil {
-		return err
+		return storage.ErrNotFound
 	}
 
-	filename := fmt.Sprintf("%s.yaml", p.UserID)
+	var p storage.Password
+	var found bool
+	for _, file := range files {
+		if err := s.readFile("passwords", file.Name(), &p); err != nil {
+			continue
+		}
+		if strings.ToLower(p.Email) == lowerEmail {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return storage.ErrNotFound
+	}
+
+	filename := fmt.Sprintf("%s.json", p.UserID)
 	return s.deleteFile("passwords", filename)
 }
 
-func (s *yamlFileStorage) ListPasswords(ctx context.Context) ([]storage.Password, error) {
+func (s *fileStorage) ListPasswords(ctx context.Context) ([]storage.Password, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -304,11 +349,11 @@ func (s *yamlFileStorage) ListPasswords(ctx context.Context) ([]storage.Password
 
 // Client operations
 
-func (s *yamlFileStorage) CreateClient(ctx context.Context, c storage.Client) error {
+func (s *fileStorage) CreateClient(ctx context.Context, c storage.Client) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	filename := fmt.Sprintf("%s.yaml", c.ID)
+	filename := fmt.Sprintf("%s.json", c.ID)
 
 	if s.fileExists("clients", filename) {
 		return storage.ErrAlreadyExists
@@ -317,12 +362,12 @@ func (s *yamlFileStorage) CreateClient(ctx context.Context, c storage.Client) er
 	return s.writeFile("clients", filename, c)
 }
 
-func (s *yamlFileStorage) GetClient(ctx context.Context, id string) (storage.Client, error) {
+func (s *fileStorage) GetClient(ctx context.Context, id string) (storage.Client, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	var c storage.Client
-	filename := fmt.Sprintf("%s.yaml", id)
+	filename := fmt.Sprintf("%s.json", id)
 
 	if err := s.readFile("clients", filename, &c); err != nil {
 		return storage.Client{}, err
@@ -331,12 +376,14 @@ func (s *yamlFileStorage) GetClient(ctx context.Context, id string) (storage.Cli
 	return c, nil
 }
 
-func (s *yamlFileStorage) UpdateClient(ctx context.Context, id string, updater func(old storage.Client) (storage.Client, error)) error {
+func (s *fileStorage) UpdateClient(ctx context.Context, id string, updater func(old storage.Client) (storage.Client, error)) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	c, err := s.GetClient(ctx, id)
-	if err != nil {
+	// Don't call GetClient (would cause deadlock), read directly instead
+	var c storage.Client
+	filename := fmt.Sprintf("%s.json", id)
+	if err := s.readFile("clients", filename, &c); err != nil {
 		return err
 	}
 
@@ -345,19 +392,19 @@ func (s *yamlFileStorage) UpdateClient(ctx context.Context, id string, updater f
 		return err
 	}
 
-	filename := fmt.Sprintf("%s.yaml", id)
+	// Reuse filename variable
 	return s.writeFile("clients", filename, updated)
 }
 
-func (s *yamlFileStorage) DeleteClient(ctx context.Context, id string) error {
+func (s *fileStorage) DeleteClient(ctx context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	filename := fmt.Sprintf("%s.yaml", id)
+	filename := fmt.Sprintf("%s.json", id)
 	return s.deleteFile("clients", filename)
 }
 
-func (s *yamlFileStorage) ListClients(ctx context.Context) ([]storage.Client, error) {
+func (s *fileStorage) ListClients(ctx context.Context) ([]storage.Client, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -378,5 +425,3 @@ func (s *yamlFileStorage) ListClients(ctx context.Context) ([]storage.Client, er
 
 	return clients, nil
 }
-
-// Continue in next file due to length...
