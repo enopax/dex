@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enopax Authentication</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #f5f5f5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        .theme-panel {
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            max-width: 450px;
+            width: 100%;
+        }
+        .theme-heading {
+            margin: 0 0 24px 0;
+            font-size: 24px;
+            font-weight: 600;
+            color: #333;
+        }
+        .theme-form-row {
+            margin-bottom: 16px;
+        }
+        .theme-form-label {
+            margin-bottom: 6px;
+            font-weight: 500;
+            color: #555;
+        }
+        .theme-form-input {
+            width: 100%;
+            padding: 10px 12px;
+            font-size: 14px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .theme-form-input:focus {
+            outline: none;
+            border-color: #4A90E2;
+        }
+        .dex-btn {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            font-weight: 500;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .theme-btn--primary {
+            background: #4A90E2;
+            color: white;
+        }
+        .theme-btn--primary:hover:not(:disabled) {
+            background: #357ABD;
+        }
+        .theme-btn--secondary {
+            background: #6c757d;
+            color: white;
+        }
+        .theme-btn--secondary:hover:not(:disabled) {
+            background: #5a6268;
+        }
+        .dex-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .dex-error-box {
+            background: #fee;
+            color: #c33;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 16px;
+            border: 1px solid #fcc;
+        }
+        .theme-divider {
+            margin: 20px 0;
+            text-align: center;
+            color: #666;
+            position: relative;
+        }
+        .theme-divider::before,
+        .theme-divider::after {
+            content: "";
+            position: absolute;
+            top: 50%;
+            width: 45%;
+            height: 1px;
+            background: #ddd;
+        }
+        .theme-divider::before { left: 0; }
+        .theme-divider::after { right: 0; }
+        .theme-link-back {
+            margin-top: 20px;
+            text-align: center;
+        }
+        .dex-subtle-text {
+            color: #666;
+            text-decoration: none;
+        }
+        .dex-subtle-text:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>

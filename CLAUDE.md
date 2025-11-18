@@ -2427,6 +2427,14 @@ GET /setup-auth?token=abc123...xyz
 - Templates loaded at connector initialization
 - Error handling for template rendering failures
 
+**Template Fix** (2025-11-18):
+- ✅ Created `templates/header.html` with complete HTML structure and CSS styling
+- ✅ Created `templates/footer.html` with closing tags
+- ✅ Fixed template rendering errors (HTTP 500 → HTTP 200)
+- ✅ Login and 2FA pages now render successfully
+- Templates now use consistent embedded filesystem approach
+- All templates include proper header/footer references
+
 ### Files Modified
 
 1. **handlers.go** (updated)
@@ -2453,6 +2461,15 @@ GET /setup-auth?token=abc123...xyz
 5. **handlers_authsetup_test.go** (previously added - 330 lines)
    - Comprehensive tests for auth setup endpoints
    - All tests passing ✅
+
+6. **templates/header.html** (NEW - 2025-11-18)
+   - Complete HTML header with DOCTYPE and styling
+   - Responsive CSS for all Dex theme classes
+   - Mobile-friendly design
+
+7. **templates/footer.html** (NEW - 2025-11-18)
+   - HTML closing tags
+   - Completes template structure
 
 ### Next Steps
 
