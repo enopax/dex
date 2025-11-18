@@ -2401,6 +2401,215 @@ GET /setup-auth?token=abc123...xyz
 
 ---
 
+## Security Audit (Phase 7 Week 14 - COMPLETE)
+
+**Purpose**: Comprehensive security review of the enhanced local connector implementation.
+
+**Status**: ✅ COMPLETE (2025-11-18) - Security audit completed, automated security checks implemented
+
+### Overview
+
+A thorough security audit was conducted covering all aspects of the authentication system, including:
+- Authentication flow security (passkey, password, TOTP, magic link)
+- Timing attack vulnerability analysis
+- Input validation review
+- Error message information leakage assessment
+- Rate limiting effectiveness
+- HTTPS configuration requirements
+- Secret storage security
+
+### Security Audit Report
+
+**Location**: `docs/enhancements/security-audit.md` (comprehensive 1100+ line report)
+
+**Overall Security Rating**: ✅ **GOOD** with known improvements needed
+
+### Automated Security Checks
+
+**Location**: `scripts/security-check.sh` (executable security scanner)
+
+**Features**:
+- File permissions check (0600 for data files)
+- Hardcoded secrets detection
+- HTTPS configuration validation
+- Rate limiting verification
+- Constant-time comparison checks
+- Input validation assessment
+- Error message analysis
+- Cryptographic library usage audit
+- Dependency vulnerability scanning (govulncheck integration)
+- Configuration security review
+
+**Running Security Checks**:
+```bash
+# Make executable (if not already)
+chmod +x scripts/security-check.sh
+
+# Run security scan
+./scripts/security-check.sh
+```
+
+### Critical Findings
+
+#### ⚠️ HIGH PRIORITY - Must Fix Before Production
+
+1. **Missing Password Rate Limiting** ❌
+   - **Issue**: No rate limiting on password authentication attempts
+   - **Impact**: HIGH - Allows unlimited brute force attempts
+   - **Location**: `connector/local-enhanced/password.go`, `handlers.go`
+   - **Status**: NOT IMPLEMENTED
+   - **Recommendation**: Implement PasswordRateLimiter (5 attempts per 5 minutes)
+
+2. **Missing HTTPS Validation for Magic Links** ⚠️
+   - **Issue**: Magic link URLs don't validate HTTPS
+   - **Impact**: HIGH - Could send tokens over unencrypted connections
+   - **Location**: `connector/local-enhanced/config.go`
+   - **Status**: NOT IMPLEMENTED
+   - **Recommendation**: Validate baseURL and callbackURL use HTTPS
+
+3. **User Enumeration via Error Messages** ⚠️
+   - **Issue**: "User not found" messages reveal email existence
+   - **Impact**: MEDIUM - Enables targeted attacks
+   - **Location**: Multiple handlers
+   - **Status**: PRESENT IN CODE
+   - **Recommendation**: Use generic "Authentication failed" messages
+
+#### ⚠️ MEDIUM PRIORITY - Fix Before Production
+
+4. **Missing HTTPS Validation for WebAuthn RPOrigins** ⚠️
+   - **Issue**: No validation that RPOrigins use HTTPS
+   - **Impact**: MEDIUM - Could allow insecure WebAuthn configuration
+   - **Location**: `connector/local-enhanced/config.go`
+   - **Status**: NOT IMPLEMENTED
+   - **Recommendation**: Validate RPOrigins in Config.Validate()
+
+5. **gRPC API Lacks Authentication** ⚠️
+   - **Issue**: gRPC endpoints have no authentication
+   - **Impact**: HIGH (production only) - Unauthorized API access
+   - **Location**: `connector/local-enhanced/grpc.go`
+   - **Status**: DOCUMENTED AS TODO
+   - **Recommendation**: Implement API keys, mTLS, or JWT authentication
+
+### Security Strengths
+
+✅ **What's Working Well**:
+- Comprehensive input validation across all endpoints
+- Secure password hashing with bcrypt (cost 10)
+- WebAuthn implementation follows W3C specification
+- Cryptographically secure random generation (crypto/rand)
+- File storage uses appropriate permissions (0600)
+- Session management with proper TTL (5-10 minutes)
+- CSRF protection via OAuth state parameters
+- Rate limiting for TOTP (5 per 5 minutes)
+- Rate limiting for magic links (3/hour, 10/day)
+- Backup codes hashed with bcrypt
+- No usage of weak crypto (MD5, SHA1, math/rand)
+- Clone detection for passkeys (sign counter validation)
+
+### Timing Attack Analysis
+
+**Status**: ✅ **ACCEPTABLE**
+
+**Analysis**:
+- ✅ Password comparison uses bcrypt (constant-time)
+- ✅ Backup code validation uses bcrypt (constant-time)
+- ✅ TOTP validation uses subtle.ConstantTimeCompare (via library)
+- ⚠️ Token comparisons via string/map lookup (low impact due to randomness)
+- ⚠️ Session ID comparisons via map lookup (low impact, short TTL)
+
+**Verdict**: Critical operations use constant-time comparison. Potential timing leaks have low impact due to randomness, rate limiting, and short TTLs.
+
+### Input Validation Summary
+
+**Status**: ✅ **EXCELLENT**
+
+All user inputs validated:
+- ✅ User ID - Non-empty string validation
+- ✅ Email - Regex format validation (⚠️ could be improved with RFC 5322 parser)
+- ✅ Password - Length (8-128) + complexity (letter + number)
+- ✅ Username - Length (3-64) + alphanumeric rules
+- ✅ TOTP Code - 6-digit numeric validation
+- ✅ Backup Code - 8-char alphanumeric validation
+- ✅ Session ID - Non-empty + existence check
+- ✅ WebAuthn credentials - Type + field validation (via go-webauthn library)
+
+### Rate Limiting Summary
+
+| Authentication Method | Rate Limit | Status |
+|----------------------|------------|--------|
+| Password | None | ❌ **CRITICAL** - Must implement |
+| Passkey (WebAuthn) | Session TTL only | ⚠️ Partial (low priority) |
+| TOTP | 5 per 5 minutes | ✅ Excellent |
+| Backup codes | Via TOTP limiter | ✅ Excellent |
+| Magic link | 3/hour, 10/day | ✅ Excellent |
+
+### Secret Storage Summary
+
+**Status**: ✅ **SECURE**
+
+| Secret Type | Storage Method | Hashed? | Permissions | Status |
+|-------------|----------------|---------|-------------|--------|
+| Password | User JSON file | ✅ bcrypt | 0600 | ✅ Secure |
+| TOTP secret | User JSON file | ❌ Plaintext | 0600 | ✅ Acceptable |
+| Backup codes | User JSON file | ✅ bcrypt | 0600 | ✅ Secure |
+| Magic link tokens | Token JSON file | ❌ Plaintext | 0600 | ✅ Acceptable (short TTL) |
+| Passkey public keys | User JSON file | N/A (public) | 0600 | ✅ Secure |
+| Sessions | Session JSON files | ❌ Plaintext | 0600 | ✅ Acceptable (short TTL) |
+
+### Action Items
+
+**Before Production Deployment**:
+- [ ] Implement password authentication rate limiting (HIGH PRIORITY)
+- [ ] Add HTTPS validation for magic link URLs (HIGH PRIORITY)
+- [ ] Fix user enumeration in error messages (MEDIUM PRIORITY)
+- [ ] Add HTTPS validation for WebAuthn RPOrigins (MEDIUM PRIORITY)
+- [ ] Implement gRPC API authentication (HIGH PRIORITY for production)
+- [ ] Add .env to .gitignore
+- [ ] Review and update example passwords in config.dev.yaml
+
+**Optional Improvements**:
+- [ ] Use constant-time comparison for all token operations
+- [ ] Improve email validation (RFC 5322 compliance)
+- [ ] Add response time jitter to obscure timing information
+- [ ] Encrypt TOTP secrets at rest (defense in depth)
+- [ ] Implement comprehensive audit logging
+
+### Security Testing
+
+**Tools Used**:
+- Custom security check script (`scripts/security-check.sh`)
+- go vet (static analysis)
+- Manual code review
+
+**Recommended Additional Testing**:
+- [ ] Install and run govulncheck for dependency scanning
+- [ ] Penetration testing (OWASP ZAP or Burp Suite)
+- [ ] Security code review by external auditor
+- [ ] Compliance review (OWASP ASVS, NIST guidelines)
+
+### Documentation
+
+**Security Documentation Created**:
+1. `docs/enhancements/security-audit.md` - Comprehensive audit report
+2. `scripts/security-check.sh` - Automated security scanner
+3. Security best practices in CLAUDE.md (this section)
+4. Configuration security guide (`docs/enhancements/configuration-guide.md`)
+
+### Conclusion
+
+The Enhanced Local Connector has a **solid security foundation** with comprehensive input validation, secure password storage, and proper session management. However, several critical improvements are required before production deployment:
+
+**Must Fix**:
+1. Password rate limiting (prevents brute force)
+2. HTTPS validation (prevents token interception)
+3. User enumeration (reduces attack surface)
+
+**Overall Security Assessment**: ✅ **Safe for development/staging** with known issues documented. **Requires security fixes** before production deployment.
+
+**Deliverable**: ✅ Comprehensive security audit complete with automated checks and actionable recommendations
+
+---
+
 ## Best Practices
 
 ### Security
