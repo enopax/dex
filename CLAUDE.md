@@ -123,6 +123,7 @@ make build
 | **docs/enhancements/configuration-guide.md** | Comprehensive configuration reference for all settings | Deploying to production |
 | **docs/enhancements/migration-guide.md** | Migration from old local connector to enhanced connector | Migrating existing users |
 | **docs/enhancements/storage-schema.md** | Storage schema and file formats | Before implementing storage |
+| **docs/enhancements/architecture-diagrams.md** | System architecture and component diagrams (Mermaid) | Understanding system design |
 
 ---
 
