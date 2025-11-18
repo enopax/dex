@@ -177,7 +177,7 @@ This implementation plan covers building an **Enhanced Local Connector** for Dex
 ### Week 3: User Storage Implementation
 
 #### User Schema
-- [ ] Implement enhanced User struct:
+- [x] Implement enhanced User struct:
   ```go
   type User struct {
       ID              string
@@ -204,12 +204,12 @@ This implementation plan covers building an **Enhanced Local Connector** for Dex
   }
   ```
 
-- [ ] Implement JSON marshaling/unmarshaling
-- [ ] Add validation functions
-- [ ] Write unit tests for user struct
+- [x] Implement JSON marshaling/unmarshaling (handled automatically by Go's json package)
+- [x] Add validation functions (connector/local-enhanced/validation.go)
+- [x] Write unit tests for user struct (connector/local-enhanced/validation_test.go)
 
 #### Passkey Schema
-- [ ] Implement Passkey credential struct:
+- [x] Implement Passkey credential struct:
   ```go
   type Passkey struct {
       ID              string
@@ -231,11 +231,11 @@ This implementation plan covers building an **Enhanced Local Connector** for Dex
   }
   ```
 
-- [ ] Implement credential storage format
-- [ ] Add CRUD operations
-- [ ] Write unit tests
+- [x] Implement credential storage format (defined in connector/local-enhanced/local.go)
+- [x] Add CRUD operations (implemented in connector/local-enhanced/storage.go)
+- [x] Write unit tests (connector/local-enhanced/storage_test.go and validation_test.go)
 
-**Deliverable**: Storage schemas implemented and tested
+**Deliverable**: Storage schemas implemented and tested ✅
 
 ---
 

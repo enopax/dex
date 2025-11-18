@@ -3,7 +3,7 @@
 **Project**: Dex Fork with Enhanced Local Connector
 **Repository**: enopax/dex
 **Branch**: `feature/passkeys` (implementation), `main` (upstream-compatible)
-**Last Updated**: 2025-11-18
+**Last Updated**: 2025-11-18 (Phase 1 Week 3 completed)
 
 ---
 
@@ -322,23 +322,27 @@ userID := fmt.Sprintf("%x-%x-%x-%x-%x",
 
 ---
 
-### Enhanced Local Connector (To Be Implemented)
+### Enhanced Local Connector (In Development)
 
-**Location**: `connector/local-enhanced/` (TO BE CREATED)
+**Location**: `connector/local-enhanced/`
 
 **Package Structure**:
 ```
 connector/local-enhanced/
-├── local.go              # Connector implementation
-├── config.go             # Configuration
-├── password.go           # Password auth
-├── passkey.go            # WebAuthn passkey
-├── totp.go               # TOTP 2FA
-├── magiclink.go          # Magic link auth
-├── storage.go            # Storage interface
-├── handlers.go           # HTTP handlers
-├── local_test.go         # Tests
-└── templates/
+├── local.go              # Connector implementation ✅
+├── config.go             # Configuration ✅
+├── validation.go         # Validation functions ✅
+├── password.go           # Password auth (TODO)
+├── passkey.go            # WebAuthn passkey (TODO)
+├── totp.go               # TOTP 2FA (TODO)
+├── magiclink.go          # Magic link auth (TODO)
+├── storage.go            # Storage interface ✅
+├── handlers.go           # HTTP handlers (partial)
+├── testing.go            # Test utilities ✅
+├── config_test.go        # Config tests ✅
+├── storage_test.go       # Storage tests ✅
+├── validation_test.go    # Validation tests ✅
+└── templates/            # HTML templates (TODO)
     ├── login.html
     ├── setup-auth.html
     └── manage-credentials.html
@@ -351,6 +355,43 @@ type Connector interface {
     HandleCallback(s connector.Scopes, r *http.Request) (identity connector.Identity, err error)
 }
 ```
+
+**Data Validation**:
+
+All data structures have validation methods defined in `validation.go`:
+```go
+// User validation
+if err := user.Validate(); err != nil {
+    return fmt.Errorf("invalid user: %w", err)
+}
+
+// Passkey validation
+if err := passkey.Validate(); err != nil {
+    return fmt.Errorf("invalid passkey: %w", err)
+}
+
+// Email validation
+if err := ValidateEmail(email); err != nil {
+    return err
+}
+
+// Password validation
+if err := ValidatePassword(password); err != nil {
+    return err
+}
+
+// Username validation
+if err := ValidateUsername(username); err != nil {
+    return err
+}
+```
+
+**Validation Rules**:
+- **User**: Must have ID, email, at least one auth method, valid timestamps
+- **Passkey**: Must have ID, user ID, public key, name, valid AAGUID (16 bytes)
+- **Email**: Valid RFC 5322 format with domain containing at least one dot
+- **Password**: 8-128 characters, at least one letter and one number
+- **Username**: 3-64 characters, alphanumeric/hyphens/underscores, starts with letter
 
 ---
 
