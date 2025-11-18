@@ -1,4 +1,4 @@
-package localenhanced
+package local
 
 import (
 	"context"
@@ -270,7 +270,8 @@ func TestTOTPValidationPerformance(t *testing.T) {
 	result, err := conn.BeginTOTPSetup(ctx, user)
 	require.NoError(t, err)
 
-	code := generateValidTOTPCode(result.Secret)
+	code, err := generateValidTOTPCode(result.Secret)
+	require.NoError(t, err)
 	err = conn.FinishTOTPSetup(ctx, user, result.Secret, code, result.BackupCodes)
 	require.NoError(t, err)
 
@@ -283,7 +284,8 @@ func TestTOTPValidationPerformance(t *testing.T) {
 		var totalDuration time.Duration
 
 		for i := 0; i < iterations; i++ {
-			code := generateValidTOTPCode(*user.TOTPSecret)
+			code, err := generateValidTOTPCode(*user.TOTPSecret)
+			require.NoError(t, err)
 
 			start := time.Now()
 			valid, err := conn.ValidateTOTP(ctx, user, code)
@@ -315,7 +317,8 @@ func TestTOTPValidationPerformance(t *testing.T) {
 		result, err := conn.BeginTOTPSetup(ctx, user2)
 		require.NoError(t, err)
 
-		code := generateValidTOTPCode(result.Secret)
+		code, err := generateValidTOTPCode(result.Secret)
+		require.NoError(t, err)
 		err = conn.FinishTOTPSetup(ctx, user2, result.Secret, code, result.BackupCodes)
 		require.NoError(t, err)
 

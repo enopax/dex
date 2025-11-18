@@ -25,6 +25,7 @@ type Connector struct {
 	webAuthn             *webauthn.WebAuthn
 	logger               logrus.FieldLogger
 	templates            *Templates
+	passwordRateLimiter  *PasswordRateLimiter
 	totpRateLimiter      *TOTPRateLimiter
 	magicLinkRateLimiter *MagicLinkRateLimiter
 	emailSender          EmailSender
@@ -54,6 +55,9 @@ func New(config *Config, logger logrus.FieldLogger) (*Connector, error) {
 		return nil, err
 	}
 
+	// Initialize password rate limiter (5 attempts per 5 minutes)
+	passwordRateLimiter := NewPasswordRateLimiter(5, 5*time.Minute)
+
 	// Initialize TOTP rate limiter (5 attempts per 5 minutes)
 	totpRateLimiter := NewTOTPRateLimiter(5, 5*time.Minute)
 
@@ -68,6 +72,7 @@ func New(config *Config, logger logrus.FieldLogger) (*Connector, error) {
 		ticker := time.NewTicker(10 * time.Minute)
 		defer ticker.Stop()
 		for range ticker.C {
+			passwordRateLimiter.Cleanup()
 			totpRateLimiter.Cleanup()
 			magicLinkRateLimiter.Cleanup()
 		}
@@ -79,6 +84,7 @@ func New(config *Config, logger logrus.FieldLogger) (*Connector, error) {
 		webAuthn:             webAuthn,
 		logger:               logger,
 		templates:            templates,
+		passwordRateLimiter:  passwordRateLimiter,
 		totpRateLimiter:      totpRateLimiter,
 		magicLinkRateLimiter: magicLinkRateLimiter,
 	}, nil

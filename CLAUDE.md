@@ -368,13 +368,16 @@ connector/local-enhanced/
 ├── local.go              # Connector implementation ✅
 ├── config.go             # Configuration ✅
 ├── validation.go         # Validation functions ✅
-├── password.go           # Password auth (TODO)
+├── password.go           # Password auth + rate limiting ✅ (2025-11-18)
+├── password_test.go      # Password tests ✅ (9 tests, all passing)
 ├── passkey.go            # WebAuthn passkey ✅
 ├── passkey_test.go       # Passkey tests ✅
-├── totp.go               # TOTP 2FA (TODO)
-├── magiclink.go          # Magic link auth (TODO)
+├── totp.go               # TOTP 2FA ✅
+├── totp_test.go          # TOTP tests ✅
+├── magiclink.go          # Magic link auth ✅
+├── magiclink_test.go     # Magic link tests ✅
 ├── storage.go            # Storage interface ✅
-├── handlers.go           # HTTP handlers (partial)
+├── handlers.go           # HTTP handlers ✅
 ├── testing.go            # Test utilities ✅
 ├── config_test.go        # Config tests ✅
 ├── storage_test.go       # Storage tests ✅
@@ -2861,12 +2864,21 @@ chmod +x scripts/security-check.sh
 
 #### ⚠️ HIGH PRIORITY - Must Fix Before Production
 
-1. **Missing Password Rate Limiting** ❌
-   - **Issue**: No rate limiting on password authentication attempts
-   - **Impact**: HIGH - Allows unlimited brute force attempts
-   - **Location**: `connector/local-enhanced/password.go`, `handlers.go`
-   - **Status**: NOT IMPLEMENTED
-   - **Recommendation**: Implement PasswordRateLimiter (5 attempts per 5 minutes)
+1. **Password Rate Limiting** ✅ **COMPLETE** (2025-11-18)
+   - **Issue**: ~~No rate limiting on password authentication attempts~~ **FIXED**
+   - **Impact**: HIGH (was critical security vulnerability)
+   - **Location**: `connector/local-enhanced/password.go`, `local.go`
+   - **Status**: ✅ **IMPLEMENTED**
+   - **Implementation**:
+     - PasswordRateLimiter with 5 attempts per 5 minutes
+     - Automatic reset on successful authentication
+     - Cleanup goroutine every 10 minutes
+     - Per-user sliding window rate limiting
+     - Comprehensive test suite (9 tests, all passing)
+   - **Files Modified**:
+     - `password.go` - Added PasswordRateLimiter struct and VerifyPassword rate limiting
+     - `local.go` - Added passwordRateLimiter field and initialization
+     - `password_test.go` - New test file with 9 comprehensive tests
 
 2. **Missing HTTPS Validation for Magic Links** ⚠️
    - **Issue**: Magic link URLs don't validate HTTPS
