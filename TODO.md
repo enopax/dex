@@ -1358,18 +1358,27 @@ make test-e2e-short
 ### Week 14: Documentation & Polish
 
 #### User Documentation
-- [ ] Write user guide:
-  - How to set up passkey
-  - How to set up 2FA
-  - How to manage credentials
-  - How to recover account
+- [x] Write comprehensive authentication flow documentation ✅ (2025-11-18)
+  - [x] User registration flow
+  - [x] Passkey authentication flow
+  - [x] Password authentication flow
+  - [x] Magic link authentication flow
+  - [x] Two-factor authentication (2FA) flow
+  - [x] TOTP setup flow
+  - [x] OAuth integration
+  - [x] Error handling
+  - [x] Security considerations
+  - [x] Complete example flows
 - [ ] Create FAQ
 - [ ] Add troubleshooting guide
 - [ ] Record demo videos (optional)
 
 #### Developer Documentation
+- [x] Document complete authentication flows ✅ (2025-11-18)
+  - See `docs/enhancements/authentication-flows.md`
+- [x] Document gRPC API with examples ✅ (Phase 5 Week 11)
+  - See `docs/enhancements/grpc-api.md`
 - [ ] Write integration guide for Platform developers
-- [ ] Document gRPC API with examples
 - [ ] Create migration guide from old local connector
 - [ ] Document configuration options
 - [ ] Add architecture diagrams

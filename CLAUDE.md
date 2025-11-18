@@ -3,7 +3,7 @@
 **Project**: Dex Fork with Enhanced Local Connector
 **Repository**: enopax/dex
 **Branch**: `feature/passkeys` (implementation), `main` (upstream-compatible)
-**Last Updated**: 2025-11-18 (Phase 7 Week 13 - TOTP handler tests implemented, coverage 73.1%)
+**Last Updated**: 2025-11-18 (Phase 7 Week 14 - Authentication flows documentation complete)
 
 ---
 
@@ -117,6 +117,8 @@ make build
 | **CHANGELOG.md** | Project change history and release notes | When updating code |
 | **README.md** | Upstream Dex documentation | Understanding Dex basics |
 | **docs/enhancements/passkey-webauthn-support.md** | Passkey concept and architecture | Before implementing passkeys |
+| **docs/enhancements/authentication-flows.md** | Complete authentication flow documentation | Understanding authentication flows |
+| **docs/enhancements/grpc-api.md** | gRPC API reference and examples | Platform integration |
 | **docs/enhancements/storage-schema.md** | Storage schema and file formats | Before implementing storage |
 
 ---
