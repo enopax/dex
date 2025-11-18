@@ -11,25 +11,14 @@ import (
 )
 
 // Helper function to create a Connector for testing
-func setupTestConnector(t *testing.T) (*Connector, *TestConfig) {
-	testConfig := DefaultTestConfig(t)
-
-	config := &Config{
-		DataDir: testConfig.DataDir,
-		Passkey: PasskeyConfig{
-			Enabled:          true,
-			RPID:             testConfig.RPID,
-			RPName:           testConfig.RPDisplayName,
-			RPOrigins:        testConfig.RPOrigins,
-			UserVerification: testConfig.UserVerification,
-		},
-	}
+func setupTestConnector(t *testing.T) (*Connector, *Config) {
+	config := DefaultTestConfig(t)
 
 	logger := TestLogger(t)
 	connector, err := New(config, logger)
 	require.NoError(t, err)
 
-	return connector, testConfig
+	return connector, config
 }
 
 // Helper function to create a test user
@@ -226,8 +215,8 @@ func TestBeginPasskeyRegistration(t *testing.T) {
 
 	// Check options
 	assert.NotEmpty(t, options.Response.Challenge)
-	assert.Equal(t, testConfig.RPID, options.Response.RelyingParty.ID)
-	assert.Equal(t, testConfig.RPDisplayName, options.Response.RelyingParty.Name)
+	assert.Equal(t, testConfig.Passkey.RPID, options.Response.RelyingParty.ID)
+	assert.Equal(t, testConfig.Passkey.RPName, options.Response.RelyingParty.Name)
 	// User ID is returned as URLEncodedBase64 ([]byte)
 	assert.Equal(t, []byte(user.ID), []byte(options.Response.User.ID.(protocol.URLEncodedBase64)))
 	assert.Equal(t, "alice", options.Response.User.Name)
@@ -300,7 +289,7 @@ func TestBeginPasskeyAuthentication(t *testing.T) {
 
 	// Check options
 	assert.NotEmpty(t, options.Response.Challenge)
-	assert.Equal(t, testConfig.RPID, options.Response.RelyingPartyID)
+	assert.Equal(t, testConfig.Passkey.RPID, options.Response.RelyingPartyID)
 	assert.NotEmpty(t, options.Response.AllowedCredentials)
 
 	// Verify session was saved

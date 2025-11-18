@@ -319,7 +319,7 @@ This implementation plan covers building an **Enhanced Local Connector** for Dex
 ### Week 6: Passkey Registration
 
 #### Registration Endpoints
-- [ ] Implement `POST /auth/passkey/register/begin`:
+- [x] Implement `POST /auth/passkey/register/begin`:
   ```go
   func (c *Connector) BeginPasskeyRegistration(w http.ResponseWriter, r *http.Request) {
       // 1. Get user from session/token

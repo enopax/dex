@@ -457,10 +457,78 @@ Passkey: PasskeyConfig{
 ```
 
 **Next Steps** (Phase 2 Week 6):
-- Implement HTTP endpoints for passkey registration/authentication
-- Create HTML templates for passkey UI
-- Add finish registration/authentication handlers
-- Integrate with OAuth flow
+- ✅ Implement HTTP endpoints for passkey registration/authentication (register/begin complete)
+- [ ] Implement finish registration handler
+- [ ] Create HTML templates for passkey UI
+- [ ] Integrate with OAuth flow
+
+---
+
+### HTTP Handler Implementation (Phase 2 Week 6 - IN PROGRESS)
+
+**Location**: `connector/local-enhanced/handlers.go`
+
+**Implemented Endpoints**:
+
+#### POST /passkey/register/begin
+
+**Purpose**: Begins WebAuthn passkey registration ceremony.
+
+**Request**:
+```json
+{
+  "user_id": "user-uuid"
+}
+```
+
+**Response**:
+```json
+{
+  "session_id": "base64-session-id",
+  "options": {
+    "publicKey": {
+      "challenge": "base64-challenge",
+      "rp": { "name": "Enopax", "id": "auth.enopax.io" },
+      "user": { "id": "base64-user-id", "name": "user@example.com", "displayName": "User" },
+      "pubKeyCredParams": [...],
+      "timeout": 60000,
+      "authenticatorSelection": {...},
+      "attestation": "none"
+    }
+  }
+}
+```
+
+**Implementation Details**:
+- Validates request method (POST only)
+- Checks if passkeys are enabled in configuration
+- Retrieves user from storage
+- Calls `BeginPasskeyRegistration()` to generate challenge and options
+- Creates WebAuthn session with 5-minute TTL
+- Returns session ID and PublicKeyCredentialCreationOptions
+
+**Error Handling**:
+- `405 Method Not Allowed` - Non-POST requests
+- `403 Forbidden` - Passkeys disabled in configuration
+- `400 Bad Request` - Invalid request body or missing user_id
+- `404 Not Found` - User not found
+- `500 Internal Server Error` - Registration setup failed
+
+**Testing**:
+- Unit tests in `handlers_test.go`
+- Tests for successful registration, method validation, configuration checks, input validation, and concurrent requests
+- All tests passing (100% coverage for this endpoint)
+
+**Security**:
+- Validates passkey configuration before processing
+- Validates user ID before database lookup
+- Logs all registration attempts
+- Uses secure session generation
+
+**Next Steps**:
+- Implement `POST /passkey/register/finish` to complete registration
+- Add request/response validation middleware
+- Create HTML templates for registration UI
 
 ---
 

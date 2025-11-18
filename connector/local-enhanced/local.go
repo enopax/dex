@@ -258,6 +258,11 @@ type Templates struct {
 
 // LoadTemplates loads HTML templates from the template directory.
 func LoadTemplates(templateDir string) (*Templates, error) {
-	// TODO: Implement template loading
+	// If template directory is empty (for tests), return empty templates
+	if templateDir == "" {
+		return &Templates{}, nil
+	}
+
+	// TODO: Implement actual template loading from files
 	return &Templates{}, nil
 }

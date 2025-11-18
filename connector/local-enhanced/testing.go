@@ -48,21 +48,43 @@ type TestConfig struct {
 }
 
 // DefaultTestConfig returns a default configuration for testing
-func DefaultTestConfig(t *testing.T) *TestConfig {
+func DefaultTestConfig(t *testing.T) *Config {
 	tempDir, err := os.MkdirTemp("", "dex-local-enhanced-test-*")
 	require.NoError(t, err, "failed to create temp directory")
 
-	return &TestConfig{
-		DataDir:          tempDir,
-		RPDisplayName:    "Enopax Test",
-		RPID:             "localhost",
-		RPOrigins:        []string{"http://localhost:5556"},
-		UserVerification: "preferred",
-		TOTPIssuer:       "Enopax Test",
-		MagicLinkTTL:     600,  // 10 minutes
-		SessionTTL:       300,  // 5 minutes
-		EnableMagicLink:  true,
-		Enable2FA:        false,
+	return &Config{
+		BaseURL:     "http://localhost:5556",
+		DataDir:     tempDir,
+		TemplateDir: "", // Empty for tests - templates not needed
+		Passkey: PasskeyConfig{
+			Enabled:          true,
+			RPID:             "localhost",
+			RPName:           "Enopax Test",
+			RPOrigins:        []string{"http://localhost:5556"},
+			UserVerification: "preferred",
+		},
+		TwoFactor: TwoFactorConfig{
+			Required:    false,
+			Methods:     []string{"totp", "passkey"},
+			GracePeriod: 86400 * 7, // 7 days
+		},
+		MagicLink: MagicLinkConfig{
+			Enabled: true,
+			TTL:     600, // 10 minutes
+			RateLimit: RateLimitConfig{
+				PerHour: 3,
+				PerDay:  10,
+			},
+		},
+		Email: EmailConfig{
+			SMTP: SMTPConfig{
+				Host: "localhost",
+				Port: 587,
+				TLS:  false,
+			},
+			From:     "test@example.com",
+			FromName: "Test",
+		},
 	}
 }
 
