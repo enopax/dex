@@ -779,3 +779,335 @@ func TestCleanupExpired2FASessions(t *testing.T) {
 		assert.LessOrEqual(t, len(files), 6)
 	})
 }
+
+// TestSaveAuthSetupToken tests saving auth setup tokens.
+func TestSaveAuthSetupToken(t *testing.T) {
+	dataDir := SetupTestStorage(t)
+	defer CleanupTestStorage(t, dataDir)
+
+	storage, err := NewFileStorage(dataDir)
+	require.NoError(t, err)
+
+	ctx := TestContext(t)
+
+	t.Run("creates file in auth-setup-tokens directory", func(t *testing.T) {
+		token := &AuthSetupToken{
+			Token:     "test-token-abc123",
+			UserID:    "user-id-123",
+			Email:     "user@example.com",
+			CreatedAt: time.Now(),
+			ExpiresAt: time.Now().Add(24 * time.Hour),
+			Used:      false,
+			ReturnURL: "https://platform.example.com/dashboard",
+		}
+
+		err = storage.SaveAuthSetupToken(ctx, token)
+		require.NoError(t, err)
+
+		// Verify file was created
+		tokenPath := filepath.Join(dataDir, "auth-setup-tokens", token.Token+".json")
+		AssertFileExists(t, tokenPath)
+		AssertFilePermissions(t, tokenPath, 0600)
+	})
+
+	t.Run("concurrent saves work correctly", func(t *testing.T) {
+		// Create multiple tokens concurrently
+		tokenCount := 5
+		done := make(chan bool, tokenCount)
+
+		for i := 0; i < tokenCount; i++ {
+			go func(index int) {
+				token := &AuthSetupToken{
+					Token:     GenerateTestID(),
+					UserID:    "user-id-" + GenerateTestID(),
+					Email:     "user" + GenerateTestID() + "@example.com",
+					CreatedAt: time.Now(),
+					ExpiresAt: time.Now().Add(24 * time.Hour),
+					Used:      false,
+					ReturnURL: "https://platform.example.com/dashboard",
+				}
+				err := storage.SaveAuthSetupToken(ctx, token)
+				assert.NoError(t, err)
+				done <- true
+			}(i)
+		}
+
+		// Wait for all goroutines to complete
+		for i := 0; i < tokenCount; i++ {
+			<-done
+		}
+
+		// Verify all files were created
+		tokensDir := filepath.Join(dataDir, "auth-setup-tokens")
+		files, err := filepath.Glob(filepath.Join(tokensDir, "*.json"))
+		require.NoError(t, err)
+		assert.GreaterOrEqual(t, len(files), tokenCount)
+	})
+}
+
+// TestGetAuthSetupToken tests retrieving auth setup tokens.
+func TestGetAuthSetupToken(t *testing.T) {
+	dataDir := SetupTestStorage(t)
+	defer CleanupTestStorage(t, dataDir)
+
+	storage, err := NewFileStorage(dataDir)
+	require.NoError(t, err)
+
+	ctx := TestContext(t)
+
+	t.Run("retrieves token correctly", func(t *testing.T) {
+		token := &AuthSetupToken{
+			Token:     "test-token-retrieve",
+			UserID:    "user-id-123",
+			Email:     "user@example.com",
+			CreatedAt: time.Now(),
+			ExpiresAt: time.Now().Add(24 * time.Hour),
+			Used:      false,
+			ReturnURL: "https://platform.example.com/dashboard",
+		}
+
+		err = storage.SaveAuthSetupToken(ctx, token)
+		require.NoError(t, err)
+
+		retrieved, err := storage.GetAuthSetupToken(ctx, token.Token)
+		require.NoError(t, err)
+		assert.Equal(t, token.Token, retrieved.Token)
+		assert.Equal(t, token.UserID, retrieved.UserID)
+		assert.Equal(t, token.Email, retrieved.Email)
+		assert.Equal(t, token.ReturnURL, retrieved.ReturnURL)
+		assert.False(t, retrieved.Used)
+	})
+
+	t.Run("returns error for non-existent token", func(t *testing.T) {
+		_, err := storage.GetAuthSetupToken(ctx, "non-existent-token")
+		assert.Error(t, err)
+	})
+
+	t.Run("retrieves expired token", func(t *testing.T) {
+		expiredToken := &AuthSetupToken{
+			Token:     "expired-token",
+			UserID:    "user-id-456",
+			Email:     "user2@example.com",
+			CreatedAt: time.Now().Add(-25 * time.Hour),
+			ExpiresAt: time.Now().Add(-1 * time.Hour), // Expired 1 hour ago
+			Used:      false,
+			ReturnURL: "https://platform.example.com/dashboard",
+		}
+
+		err = storage.SaveAuthSetupToken(ctx, expiredToken)
+		require.NoError(t, err)
+
+		// Should be able to retrieve, but application logic should check expiry
+		retrieved, err := storage.GetAuthSetupToken(ctx, expiredToken.Token)
+		require.NoError(t, err)
+		assert.Equal(t, expiredToken.Token, retrieved.Token)
+		// Verify it's expired
+		assert.True(t, time.Now().After(retrieved.ExpiresAt))
+	})
+
+	t.Run("validates token structure", func(t *testing.T) {
+		token := &AuthSetupToken{
+			Token:     "test-token-structure",
+			UserID:    "user-id-789",
+			Email:     "user3@example.com",
+			CreatedAt: time.Now(),
+			ExpiresAt: time.Now().Add(24 * time.Hour),
+			Used:      false,
+			ReturnURL: "https://platform.example.com/dashboard",
+		}
+
+		err = storage.SaveAuthSetupToken(ctx, token)
+		require.NoError(t, err)
+
+		retrieved, err := storage.GetAuthSetupToken(ctx, token.Token)
+		require.NoError(t, err)
+
+		// Verify all fields
+		assert.NotEmpty(t, retrieved.Token)
+		assert.NotEmpty(t, retrieved.UserID)
+		assert.NotEmpty(t, retrieved.Email)
+		assert.NotEmpty(t, retrieved.ReturnURL)
+		assert.False(t, retrieved.CreatedAt.IsZero())
+		assert.False(t, retrieved.ExpiresAt.IsZero())
+		assert.Nil(t, retrieved.UsedAt) // Not used yet
+	})
+}
+
+// TestDeleteAuthSetupToken tests deleting auth setup tokens.
+func TestDeleteAuthSetupToken(t *testing.T) {
+	dataDir := SetupTestStorage(t)
+	defer CleanupTestStorage(t, dataDir)
+
+	storage, err := NewFileStorage(dataDir)
+	require.NoError(t, err)
+
+	ctx := TestContext(t)
+
+	t.Run("removes token file", func(t *testing.T) {
+		token := &AuthSetupToken{
+			Token:     "test-token-delete",
+			UserID:    "user-id-123",
+			Email:     "user@example.com",
+			CreatedAt: time.Now(),
+			ExpiresAt: time.Now().Add(24 * time.Hour),
+			Used:      false,
+			ReturnURL: "https://platform.example.com/dashboard",
+		}
+
+		err = storage.SaveAuthSetupToken(ctx, token)
+		require.NoError(t, err)
+
+		// Verify file exists
+		tokenPath := filepath.Join(dataDir, "auth-setup-tokens", token.Token+".json")
+		AssertFileExists(t, tokenPath)
+
+		// Delete token
+		err = storage.DeleteAuthSetupToken(ctx, token.Token)
+		require.NoError(t, err)
+
+		// Verify file was removed
+		AssertFileNotExists(t, tokenPath)
+	})
+
+	t.Run("delete is idempotent", func(t *testing.T) {
+		token := &AuthSetupToken{
+			Token:     "test-token-idempotent",
+			UserID:    "user-id-456",
+			Email:     "user2@example.com",
+			CreatedAt: time.Now(),
+			ExpiresAt: time.Now().Add(24 * time.Hour),
+			Used:      false,
+			ReturnURL: "https://platform.example.com/dashboard",
+		}
+
+		err = storage.SaveAuthSetupToken(ctx, token)
+		require.NoError(t, err)
+
+		// Delete once
+		err = storage.DeleteAuthSetupToken(ctx, token.Token)
+		require.NoError(t, err)
+
+		// Delete again - should not error
+		err = storage.DeleteAuthSetupToken(ctx, token.Token)
+		assert.NoError(t, err)
+	})
+
+	t.Run("subsequent Get returns error", func(t *testing.T) {
+		token := &AuthSetupToken{
+			Token:     "test-token-get-after-delete",
+			UserID:    "user-id-789",
+			Email:     "user3@example.com",
+			CreatedAt: time.Now(),
+			ExpiresAt: time.Now().Add(24 * time.Hour),
+			Used:      false,
+			ReturnURL: "https://platform.example.com/dashboard",
+		}
+
+		err = storage.SaveAuthSetupToken(ctx, token)
+		require.NoError(t, err)
+
+		// Delete token
+		err = storage.DeleteAuthSetupToken(ctx, token.Token)
+		require.NoError(t, err)
+
+		// Try to retrieve - should error
+		_, err = storage.GetAuthSetupToken(ctx, token.Token)
+		assert.Error(t, err)
+	})
+}
+
+// TestCleanupExpiredAuthSetupTokens tests cleanup of expired auth setup tokens.
+func TestCleanupExpiredAuthSetupTokens(t *testing.T) {
+	dataDir := SetupTestStorage(t)
+	defer CleanupTestStorage(t, dataDir)
+
+	storage, err := NewFileStorage(dataDir)
+	require.NoError(t, err)
+
+	ctx := TestContext(t)
+
+	// Create expired token
+	expiredToken := &AuthSetupToken{
+		Token:     "expired-token",
+		UserID:    "user-id-123",
+		Email:     "user@example.com",
+		CreatedAt: time.Now().Add(-25 * time.Hour),
+		ExpiresAt: time.Now().Add(-1 * time.Hour), // Expired 1 hour ago
+		Used:      false,
+		ReturnURL: "https://platform.example.com/dashboard",
+	}
+	err = storage.SaveAuthSetupToken(ctx, expiredToken)
+	require.NoError(t, err)
+
+	// Create valid token
+	validToken := &AuthSetupToken{
+		Token:     "valid-token",
+		UserID:    "user-id-456",
+		Email:     "user2@example.com",
+		CreatedAt: time.Now(),
+		ExpiresAt: time.Now().Add(24 * time.Hour),
+		Used:      false,
+		ReturnURL: "https://platform.example.com/dashboard",
+	}
+	err = storage.SaveAuthSetupToken(ctx, validToken)
+	require.NoError(t, err)
+
+	t.Run("removes expired tokens", func(t *testing.T) {
+		// Run cleanup
+		err = storage.CleanupExpiredTokens(ctx)
+		require.NoError(t, err)
+
+		// Expired token should be gone
+		expiredPath := filepath.Join(dataDir, "auth-setup-tokens", expiredToken.Token+".json")
+		AssertFileNotExists(t, expiredPath)
+	})
+
+	t.Run("keeps non-expired tokens", func(t *testing.T) {
+		// Valid token should still exist
+		validPath := filepath.Join(dataDir, "auth-setup-tokens", validToken.Token+".json")
+		AssertFileExists(t, validPath)
+
+		// Should be able to retrieve it
+		retrieved, err := storage.GetAuthSetupToken(ctx, validToken.Token)
+		require.NoError(t, err)
+		assert.Equal(t, validToken.Token, retrieved.Token)
+	})
+
+	t.Run("works with concurrent tokens", func(t *testing.T) {
+		// Create multiple tokens with different expiry times
+		for i := 0; i < 10; i++ {
+			var expiresAt time.Time
+			if i%2 == 0 {
+				// Even: expired
+				expiresAt = time.Now().Add(-1 * time.Hour)
+			} else {
+				// Odd: valid
+				expiresAt = time.Now().Add(24 * time.Hour)
+			}
+
+			token := &AuthSetupToken{
+				Token:     GenerateTestID(),
+				UserID:    "user-id-" + GenerateTestID(),
+				Email:     "user" + GenerateTestID() + "@example.com",
+				CreatedAt: time.Now(),
+				ExpiresAt: expiresAt,
+				Used:      false,
+				ReturnURL: "https://platform.example.com/dashboard",
+			}
+			err = storage.SaveAuthSetupToken(ctx, token)
+			require.NoError(t, err)
+		}
+
+		// Cleanup
+		err = storage.CleanupExpiredTokens(ctx)
+		require.NoError(t, err)
+
+		// Count remaining tokens (should be ~5 valid ones plus the original valid token)
+		tokensDir := filepath.Join(dataDir, "auth-setup-tokens")
+		files, err := filepath.Glob(filepath.Join(tokensDir, "*.json"))
+		require.NoError(t, err)
+		// We expect at least 5-6 files (5 odd-numbered + 1 original valid token)
+		assert.GreaterOrEqual(t, len(files), 5)
+		assert.LessOrEqual(t, len(files), 6)
+	})
+}

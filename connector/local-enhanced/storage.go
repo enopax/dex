@@ -496,13 +496,15 @@ func (s *FileStorage) CleanupExpiredTokens(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	now := time.Now()
+
+	// Clean up magic link tokens
 	tokensDir := filepath.Join(s.dataDir, "tokens")
 	entries, err := os.ReadDir(tokensDir)
 	if err != nil {
 		return fmt.Errorf("failed to read tokens directory: %w", err)
 	}
 
-	now := time.Now()
 	for _, entry := range entries {
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
 			continue
@@ -510,6 +512,29 @@ func (s *FileStorage) CleanupExpiredTokens(ctx context.Context) error {
 
 		tokenPath := filepath.Join(tokensDir, entry.Name())
 		var token MagicLinkToken
+		if err := s.readFile(tokenPath, &token); err != nil {
+			continue
+		}
+
+		if now.After(token.ExpiresAt) {
+			os.Remove(tokenPath)
+		}
+	}
+
+	// Clean up auth setup tokens
+	authSetupTokensDir := filepath.Join(s.dataDir, "auth-setup-tokens")
+	authEntries, err := os.ReadDir(authSetupTokensDir)
+	if err != nil {
+		return fmt.Errorf("failed to read auth-setup-tokens directory: %w", err)
+	}
+
+	for _, entry := range authEntries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+
+		tokenPath := filepath.Join(authSetupTokensDir, entry.Name())
+		var token AuthSetupToken
 		if err := s.readFile(tokenPath, &token); err != nil {
 			continue
 		}

@@ -1199,15 +1199,32 @@ type AuthSetupToken struct {
 
 ## Phase 7: Testing & Polish
 
-### Week 13: Comprehensive Testing
+### Week 13: Comprehensive Testing (IN PROGRESS - 2025-11-18)
+
+**Status**: 🚧 IN PROGRESS - Storage tests complete, WebAuthn/TOTP/MagicLink already tested
+
+**Current Coverage**: 68.8% (improved from 68.5%)
 
 #### Unit Tests
-- [ ] Test storage operations (100% coverage)
-- [ ] Test WebAuthn functions
-- [ ] Test TOTP functions
-- [ ] Test magic link functions
-- [ ] Test gRPC API endpoints
-- [ ] Run coverage analysis (target: >80%)
+- [x] Test storage operations - COMPLETE (2025-11-18)
+  - [x] Auth setup token storage (Save/Get/Delete/Cleanup) - 4 new test functions with 11 sub-tests
+  - [x] Updated CleanupExpiredTokens to clean up auth setup tokens
+  - [x] All storage tests passing ✅
+  - Note: Storage operations already had comprehensive tests (Users, Passkeys, WebAuthn sessions, Magic link tokens, 2FA sessions)
+- [x] Test WebAuthn functions - COMPLETE (Phase 2)
+  - Tests in passkey_test.go (8 test functions)
+  - Integration tests in integration_test.go
+- [x] Test TOTP functions - COMPLETE (Phase 3 Week 8)
+  - Tests in totp_test.go (8 test functions, 20+ sub-tests)
+- [x] Test magic link functions - COMPLETE (Phase 4 Week 10)
+  - Tests in magiclink_test.go (9 test functions)
+- [x] Test gRPC API endpoints - COMPLETE (Phase 5 Week 11)
+  - Tests in grpc_test.go (12 test functions, 30+ test cases)
+  - All tests passing after Week 11.5 bug fixes
+- [ ] Run coverage analysis (target: >80%) - IN PROGRESS
+  - Current: 68.8%
+  - Need: +11.2 percentage points
+  - Focus areas: Handler tests (some failing due to assertion mismatches), template rendering (deferred)
 
 #### Integration Tests
 - [ ] Test complete passkey registration flow

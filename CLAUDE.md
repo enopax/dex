@@ -2665,7 +2665,7 @@ golangci-lint run
 
 ### Achievements
 
-**Overall Coverage**: 68.5% (improved from 62.6% - a 5.9 percentage point increase from Phase 3, and from 66.8% at start of this session)
+**Overall Coverage**: 68.8% (improved from 68.5% - incremental improvement, total increase from 62.6% is 6.2 percentage points)
 
 **Tests Fixed**:
 - ✅ All 12 gRPC test functions now passing (fixed user creation validation, RemovePassword setup, EnableTOTP user creation)
@@ -2673,18 +2673,27 @@ golangci-lint run
 - ✅ Fixed test setup issues (create user before setting password, avoid duplicate user creation)
 
 **New Storage Tests Implemented** (Phase 7 Week 13):
+
+**Session 1 - 2FA Session Storage**:
 - ✅ `TestSave2FASession` - File creation, permissions (0600), concurrent saves (5 goroutines)
 - ✅ `TestGet2FASession` - Retrieval, non-existent session errors, expired session handling, structure validation
 - ✅ `TestDelete2FASession` - File removal, idempotent deletion, subsequent Get errors
 - ✅ `TestCleanupExpired2FASessions` - Expired session removal, valid session preservation, concurrent session handling
 
+**Session 2 - Auth Setup Token Storage** (2025-11-18):
+- ✅ `TestSaveAuthSetupToken` - File creation, permissions (0600), concurrent saves (5 goroutines)
+- ✅ `TestGetAuthSetupToken` - Retrieval, non-existent token errors, expired token handling, structure validation (4 sub-tests)
+- ✅ `TestDeleteAuthSetupToken` - File removal, idempotent deletion, subsequent Get errors (3 sub-tests)
+- ✅ `TestCleanupExpiredAuthSetupTokens` - Expired token removal, valid token preservation, concurrent token handling (3 sub-tests)
+
 **Test Files Modified**:
-- `storage_test.go` - Added 4 new test functions (TestSave2FASession, TestGet2FASession, TestDelete2FASession, TestCleanupExpired2FASessions) with 300+ lines of comprehensive tests
+- `storage_test.go` - Added 8 new test functions (4 for 2FA sessions + 4 for auth setup tokens) with 600+ lines of comprehensive tests
 - `testing.go` - Added GenerateTestID() helper function for concurrent test scenarios
 - `grpc_test.go` - Fixed 3 test functions (TestGRPCServer_GetAuthMethods, TestGRPCServer_RemovePassword, TestGRPCServer_EnableTOTP)
 
 **Code Changes**:
 - `grpc.go` - Modified CreateUser to skip auth method validation (users set up auth later via auth setup flow), enabled MagicLinkEnabled by default
+- `storage.go` - Enhanced CleanupExpiredTokens to clean up both magic link tokens AND auth setup tokens
 
 ### Test Results
 
@@ -2707,6 +2716,12 @@ golangci-lint run
 - TestGet2FASession (4 test cases: retrieval, non-existent, expired, structure validation)
 - TestDelete2FASession (3 test cases: removal, idempotent, subsequent Get)
 - TestCleanupExpired2FASessions (3 test cases: removal, preservation, concurrent)
+
+**Auth Setup Token Storage Tests**: 4/4 passing ✅ (NEW - 2025-11-18)
+- TestSaveAuthSetupToken (2 test cases: file creation with permissions + concurrent saves)
+- TestGetAuthSetupToken (4 test cases: retrieval, non-existent, expired, structure validation)
+- TestDeleteAuthSetupToken (3 test cases: removal, idempotent, subsequent Get)
+- TestCleanupExpiredAuthSetupTokens (3 test cases: removal, preservation, concurrent)
 
 **Still Failing** (not critical - deferred to handler adjustments):
 - TestHandle2FAPrompt (template rendering, status code differences)
