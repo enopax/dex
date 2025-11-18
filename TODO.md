@@ -1864,10 +1864,70 @@ require (
 - [ ] Admin UI for user management
 - [ ] i18n support
 
+### Next Steps for Deployment
+
+Since the project is now production-ready, the following steps should be taken:
+
+#### Branch Merge Strategy
+1. **Create Pull Request** from `feature/passkeys` to `main`
+   - Include comprehensive PR description
+   - Reference all completed phases
+   - Highlight security fixes implemented
+   - Include test coverage metrics (79%)
+
+2. **Code Review** (if applicable)
+   - Review by senior developer or team lead
+   - Security review of critical authentication flows
+   - Performance review of test results
+
+3. **Merge to Main**
+   - Use semantic PR title following conventional commits
+   - Example: `feat: implement enhanced local connector with passkey support`
+   - Ensure all tests pass in CI/CD (if configured)
+
+4. **Tag Release**
+   - Create release tag: `v1.0.0-enhanced-connector`
+   - Include changelog from CHANGELOG.md
+   - Reference PROJECT_COMPLETION.md in release notes
+
+#### Production Deployment Checklist
+- [ ] Review production configuration (config.yaml)
+  - [ ] Update HTTPS URLs for all endpoints
+  - [ ] Configure SMTP settings for magic links
+  - [ ] Set up gRPC API keys (minimum 32 characters)
+  - [ ] Verify WebAuthn RP origins (HTTPS only)
+  - [ ] Configure 2FA policies (Required, GracePeriod)
+- [ ] Set up production environment
+  - [ ] Install TLS certificates
+  - [ ] Set file permissions (0600 for data files, 0700 for directories)
+  - [ ] Configure environment variables (SMTP password, API keys)
+  - [ ] Set up systemd service (see docs/enhancements/configuration-guide.md)
+- [ ] Security hardening
+  - [ ] Enable gRPC API authentication
+  - [ ] Verify HTTPS enforcement
+  - [ ] Review rate limiting settings
+  - [ ] Enable audit logging
+- [ ] Testing in staging
+  - [ ] Test complete OAuth flow
+  - [ ] Test all authentication methods (password, passkey, TOTP, magic link)
+  - [ ] Test 2FA enforcement
+  - [ ] Test gRPC API connectivity from Platform
+  - [ ] Performance testing (authentication latency < 200ms)
+- [ ] Monitoring setup
+  - [ ] Configure log aggregation
+  - [ ] Set up metrics collection
+  - [ ] Configure alerting for authentication failures
+  - [ ] Set up uptime monitoring
+- [ ] Documentation handoff
+  - [ ] Share docs/enhancements/platform-integration.md with Platform team
+  - [ ] Provide gRPC API documentation (docs/enhancements/grpc-api.md)
+  - [ ] Share deployment guide (docs/enhancements/configuration-guide.md)
+  - [ ] Review migration guide (if migrating existing users)
+
 See `PROJECT_COMPLETION.md` for full project summary.
 
 ---
 
 **Last Updated**: 2025-11-18
-**Version**: 2.0 (FINAL)
-**Status**: ✅ Project Complete - Ready for Production (pending security fixes)
+**Version**: 2.1
+**Status**: ✅ Project Complete - Production Ready (All Critical Security Fixes Implemented)
