@@ -10,6 +10,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Enhanced Local Connector Package Structure** (2025-11-18)
+  - Created `connector/local-enhanced/` package directory
+  - Main connector implementation in `local.go`
+  - Configuration structures in `config.go`
+  - Storage interface and file-based implementation in `storage.go`
+  - HTTP handlers stubs in `handlers.go`
+  - Template support structures
+
+- **Storage Schema** (2025-11-18)
+  - Enhanced user schema with multi-authentication support
+  - Passkey credential schema with WebAuthn fields
+  - WebAuthn session schema for challenge tracking
+  - Magic link token schema
+  - Backup code schema for 2FA recovery
+  - File-based storage with atomic writes and file locking
+  - Storage interface for future backend implementations
+
+- **Configuration System** (2025-11-18)
+  - Comprehensive configuration schema for all authentication methods
+  - Passkey/WebAuthn configuration (RP ID, origins, user verification)
+  - 2FA configuration (required, methods, grace period)
+  - Magic link configuration (TTL, rate limiting)
+  - Email/SMTP configuration
+  - Configuration validation
+
+- **Documentation** (2025-11-18)
+  - Storage schema documentation in `docs/enhancements/storage-schema.md`
+  - Complete storage format specification
+  - Migration strategy from old password storage
+  - Security considerations for each storage type
+  - Updated CLAUDE.md with storage schema reference
+
 - **Testing Infrastructure** (2025-11-18)
   - Comprehensive testing utilities in `connector/local-enhanced/testing.go`
   - Test helpers for creating test users, passkeys, sessions, and tokens

@@ -117,6 +117,7 @@ make build
 | **CHANGELOG.md** | Project change history and release notes | When updating code |
 | **README.md** | Upstream Dex documentation | Understanding Dex basics |
 | **docs/enhancements/passkey-webauthn-support.md** | Passkey concept and architecture | Before implementing passkeys |
+| **docs/enhancements/storage-schema.md** | Storage schema and file formats | Before implementing storage |
 
 ---
 
