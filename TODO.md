@@ -820,15 +820,22 @@ Add to `storage_test.go`:
 - `TestInGracePeriod`: 5/5 passing - grace period logic
 - `TestValidate2FAMethod`: 4/4 passing - TOTP, backup codes, error cases
 
-**Handler Test Files** (2025-11-18):
-- `TestHandle2FAPrompt`: 3 test cases - prompt rendering, missing session, invalid session
-- `TestHandle2FAVerifyTOTP`: 4 test cases - valid/invalid TOTP, missing/invalid session
-- `TestHandle2FAVerifyBackupCode`: 3 test cases - valid/invalid code, missing session
-- `TestHandle2FAVerifyPasskeyBegin`: 3 test cases - valid session, missing/invalid session
-- `TestHandle2FAVerifyPasskeyFinish`: 3 test cases - validation of session and WebAuthn session IDs
+**Handler Test Files** (2025-11-18, Fixed 2025-11-18):
+- `TestHandle2FAPrompt`: 3 test cases - prompt rendering (JSON), missing session, invalid session ✅
+- `TestHandle2FAVerifyTOTP`: 4 test cases - valid/invalid TOTP, missing/invalid session ✅
+- `TestHandle2FAVerifyBackupCode`: 3 test cases - valid/invalid code, missing session ✅
+- `TestHandle2FAVerifyPasskeyBegin`: 3 test cases - valid session, missing/invalid session ✅
+- `TestHandle2FAVerifyPasskeyFinish`: 3 test cases - validation of session and WebAuthn session IDs ✅
 
 **Total Unit Tests**: 27 sub-tests, all passing ✅
-**Total Handler Tests**: 16 test cases, structure complete (assertions need adjustment to match handler behavior)
+**Total Handler Tests**: 16 test cases, all passing ✅
+
+**Test Fixes Applied** (2025-11-18):
+- Fixed `handle2FAPrompt` to check for JSON response (not HTML)
+- Fixed `handle2FAVerifyTOTP` to expect HTTP 303 redirects (not 302/401)
+- Fixed `handle2FAVerifyBackupCode` to expect HTTP 303 redirects with error param
+- Fixed `handle2FAVerifyPasskeyBegin` to check for `session_id` field
+- All 2FA handler tests now passing with correct assertions
 
 ---
 

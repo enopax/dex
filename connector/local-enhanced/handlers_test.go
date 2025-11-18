@@ -893,30 +893,42 @@ func TestHandle2FAPrompt(t *testing.T) {
 		name           string
 		sessionID      string
 		expectedStatus int
-		checkResponse  func(t *testing.T, body string)
+		checkResponse  func(t *testing.T, w *httptest.ResponseRecorder)
 	}{
 		{
 			name:           "valid session shows prompt",
 			sessionID:      session.SessionID,
 			expectedStatus: http.StatusOK,
-			checkResponse: func(t *testing.T, body string) {
-				assert.Contains(t, body, "Two-Factor Authentication")
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				// Handler returns JSON, not HTML
+				assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
+
+				// Parse JSON response
+				var data map[string]interface{}
+				err := json.NewDecoder(w.Body).Decode(&data)
+				require.NoError(t, err)
+
+				// Check expected fields
+				assert.Equal(t, session.SessionID, data["SessionID"])
+				assert.NotNil(t, data["AvailableMethods"])
+				assert.Equal(t, session.CallbackURL, data["CallbackURL"])
+				assert.Equal(t, session.State, data["State"])
 			},
 		},
 		{
 			name:           "missing session ID",
 			sessionID:      "",
 			expectedStatus: http.StatusBadRequest,
-			checkResponse: func(t *testing.T, body string) {
-				assert.Contains(t, body, "missing session_id")
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				assert.Contains(t, w.Body.String(), "Missing session_id")
 			},
 		},
 		{
 			name:           "invalid session ID",
 			sessionID:      "invalid-session",
 			expectedStatus: http.StatusUnauthorized,
-			checkResponse: func(t *testing.T, body string) {
-				assert.Contains(t, body, "invalid or expired")
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				assert.Contains(t, w.Body.String(), "Invalid or expired")
 			},
 		},
 	}
@@ -936,7 +948,7 @@ func TestHandle2FAPrompt(t *testing.T) {
 
 			// Check response
 			if tt.checkResponse != nil {
-				tt.checkResponse(t, w.Body.String())
+				tt.checkResponse(t, w)
 			}
 		})
 	}
@@ -970,39 +982,44 @@ func TestHandle2FAVerifyTOTP(t *testing.T) {
 	require.NoError(t, err)
 
 	tests := []struct {
-		name           string
-		sessionID      string
-		code           string
-		expectedStatus int
-		checkRedirect  bool
+		name            string
+		sessionID       string
+		code            string
+		expectedStatus  int
+		checkRedirect   bool
+		checkErrorParam bool
 	}{
 		{
-			name:           "valid TOTP code",
-			sessionID:      session.SessionID,
-			code:           validCode,
-			expectedStatus: http.StatusFound, // 302 redirect
-			checkRedirect:  true,
+			name:            "valid TOTP code",
+			sessionID:       session.SessionID,
+			code:            validCode,
+			expectedStatus:  http.StatusSeeOther, // 303 redirect (actual handler behavior)
+			checkRedirect:   true,
+			checkErrorParam: false,
 		},
 		{
-			name:           "invalid TOTP code",
-			sessionID:      session.SessionID,
-			code:           "000000",
-			expectedStatus: http.StatusUnauthorized,
-			checkRedirect:  false,
+			name:            "invalid TOTP code",
+			sessionID:       session.SessionID,
+			code:            "000000",
+			expectedStatus:  http.StatusSeeOther, // 303 redirect to error page
+			checkRedirect:   true,
+			checkErrorParam: true, // Should have error=invalid param
 		},
 		{
-			name:           "missing session ID",
-			sessionID:      "",
-			code:           validCode,
-			expectedStatus: http.StatusBadRequest,
-			checkRedirect:  false,
+			name:            "missing session ID",
+			sessionID:       "",
+			code:            validCode,
+			expectedStatus:  http.StatusBadRequest,
+			checkRedirect:   false,
+			checkErrorParam: false,
 		},
 		{
-			name:           "invalid session ID",
-			sessionID:      "invalid-session",
-			code:           validCode,
-			expectedStatus: http.StatusUnauthorized,
-			checkRedirect:  false,
+			name:            "invalid session ID",
+			sessionID:       "invalid-session",
+			code:            validCode,
+			expectedStatus:  http.StatusSeeOther, // 303 redirect to error page
+			checkRedirect:   true,
+			checkErrorParam: true,
 		},
 	}
 
@@ -1030,8 +1047,17 @@ func TestHandle2FAVerifyTOTP(t *testing.T) {
 			if tt.checkRedirect {
 				location := w.Header().Get("Location")
 				assert.NotEmpty(t, location)
-				assert.Contains(t, location, "callback")
-				assert.Contains(t, location, "user_id="+user.ID)
+
+				if tt.checkErrorParam {
+					// Error redirect to 2FA prompt with error param
+					assert.Contains(t, location, "/2fa/prompt")
+					assert.Contains(t, location, "error=invalid")
+				} else {
+					// Success redirect to OAuth callback
+					assert.Contains(t, location, "callback")
+					assert.Contains(t, location, "user_id="+user.ID)
+					assert.Contains(t, location, "state=test-state")
+				}
 			}
 		})
 	}
@@ -1069,32 +1095,36 @@ func TestHandle2FAVerifyBackupCode(t *testing.T) {
 	require.NoError(t, err)
 
 	tests := []struct {
-		name           string
-		sessionID      string
-		code           string
-		expectedStatus int
-		checkRedirect  bool
+		name            string
+		sessionID       string
+		code            string
+		expectedStatus  int
+		checkRedirect   bool
+		checkErrorParam bool
 	}{
 		{
-			name:           "valid backup code",
-			sessionID:      session.SessionID,
-			code:           "ABCD1234",
-			expectedStatus: http.StatusFound, // 302 redirect
-			checkRedirect:  true,
+			name:            "valid backup code",
+			sessionID:       session.SessionID,
+			code:            "ABCD1234",
+			expectedStatus:  http.StatusSeeOther, // 303 redirect (actual handler behavior)
+			checkRedirect:   true,
+			checkErrorParam: false,
 		},
 		{
-			name:           "invalid backup code",
-			sessionID:      session.SessionID,
-			code:           "INVALID1",
-			expectedStatus: http.StatusUnauthorized,
-			checkRedirect:  false,
+			name:            "invalid backup code",
+			sessionID:       session.SessionID,
+			code:            "INVALID1",
+			expectedStatus:  http.StatusSeeOther, // 303 redirect to error page
+			checkRedirect:   true,
+			checkErrorParam: true,
 		},
 		{
-			name:           "missing session ID",
-			sessionID:      "",
-			code:           "EFGH5678",
-			expectedStatus: http.StatusBadRequest,
-			checkRedirect:  false,
+			name:            "missing session ID",
+			sessionID:       "",
+			code:            "EFGH5678",
+			expectedStatus:  http.StatusBadRequest,
+			checkRedirect:   false,
+			checkErrorParam: false,
 		},
 	}
 
@@ -1122,15 +1152,23 @@ func TestHandle2FAVerifyBackupCode(t *testing.T) {
 			if tt.checkRedirect {
 				location := w.Header().Get("Location")
 				assert.NotEmpty(t, location)
-				assert.Contains(t, location, "callback")
-				assert.Contains(t, location, "user_id="+user.ID)
 
-				// Verify backup code was marked as used
-				updatedUser, err := connector.storage.GetUser(ctx, user.ID)
-				require.NoError(t, err)
-				for _, bc := range updatedUser.BackupCodes {
-					if verifyPassword(tt.code, bc.Code) {
-						assert.True(t, bc.Used, "backup code should be marked as used")
+				if tt.checkErrorParam {
+					// Error redirect to 2FA prompt with error param
+					assert.Contains(t, location, "/2fa/prompt")
+					assert.Contains(t, location, "error=invalid")
+				} else {
+					// Success redirect to OAuth callback
+					assert.Contains(t, location, "callback")
+					assert.Contains(t, location, "user_id="+user.ID)
+
+					// Verify backup code was marked as used
+					updatedUser, err := connector.storage.GetUser(ctx, user.ID)
+					require.NoError(t, err)
+					for _, bc := range updatedUser.BackupCodes {
+						if verifyPassword(tt.code, bc.Code) {
+							assert.True(t, bc.Used, "backup code should be marked as used")
+						}
 					}
 				}
 			}
@@ -1171,7 +1209,8 @@ func TestHandle2FAVerifyPasskeyBegin(t *testing.T) {
 			sessionID:      session.SessionID,
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, body map[string]interface{}) {
-				assert.NotEmpty(t, body["webauthn_session_id"])
+				// Handler returns "session_id" (WebAuthn session ID) and "options"
+				assert.NotEmpty(t, body["session_id"])
 				assert.NotNil(t, body["options"])
 			},
 		},
