@@ -1380,7 +1380,11 @@ make test-e2e-short
   - See `docs/enhancements/authentication-flows.md`
 - [x] Document gRPC API with examples ✅ (Phase 5 Week 11)
   - See `docs/enhancements/grpc-api.md`
-- [ ] Write integration guide for Platform developers
+- [x] Write integration guide for Platform developers ✅ (2025-11-18)
+  - See `docs/enhancements/platform-integration.md`
+  - Comprehensive guide with gRPC client setup, user registration, OAuth integration
+  - Includes TypeScript examples for Next.js Platform
+  - Complete error handling and security considerations
 - [ ] Create migration guide from old local connector
 - [ ] Document configuration options
 - [ ] Add architecture diagrams

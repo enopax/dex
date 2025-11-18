@@ -119,6 +119,7 @@ make build
 | **docs/enhancements/passkey-webauthn-support.md** | Passkey concept and architecture | Before implementing passkeys |
 | **docs/enhancements/authentication-flows.md** | Complete authentication flow documentation | Understanding authentication flows |
 | **docs/enhancements/grpc-api.md** | gRPC API reference and examples | Platform integration |
+| **docs/enhancements/platform-integration.md** | Platform developer integration guide (TypeScript/Next.js) | Integrating with Platform |
 | **docs/enhancements/storage-schema.md** | Storage schema and file formats | Before implementing storage |
 
 ---
