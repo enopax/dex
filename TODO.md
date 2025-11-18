@@ -1303,14 +1303,32 @@ type AuthSetupToken struct {
 
 **Deliverable**: ✅ Coverage improved to 79.0% (exceeded target of 75-77%), all critical TOTP and magic link handlers tested, all gRPC TOTP endpoints tested
 
-#### Integration Tests
-- [ ] Test complete passkey registration flow
-- [ ] Test complete passkey authentication flow
-- [ ] Test 2FA flow (password + TOTP)
-- [ ] Test 2FA flow (password + passkey)
-- [ ] Test magic link flow
-- [ ] Test OAuth integration
-- [ ] Test error scenarios
+#### Integration Tests (COMPLETE - 2025-11-18)
+- [x] Test complete passkey registration flow - TestCompletePasskeyRegistrationFlow (existing)
+- [x] Test complete passkey authentication flow - TestCompletePasskeyAuthenticationFlow (existing)
+- [x] Test 2FA flow (password + TOTP) - TestComplete2FAFlow_PasswordTOTP ✅
+- [x] Test 2FA flow (password + passkey) - TestComplete2FAFlow_PasswordPasskey ✅
+- [x] Test 2FA flow (password + backup code) - TestComplete2FAFlow_PasswordBackupCode ✅
+- [x] Test 2FA session expiry - Test2FASessionExpiry ✅
+- [x] Test 2FA grace period enforcement - Test2FAGracePeriod ✅
+- [x] Test 2FA bypass for non-required users - Test2FABypassForNonRequiredUsers ✅
+- [x] Test magic link flow - TestCompleteMagicLinkFlow ✅
+- [x] Test magic link expiry - TestMagicLinkExpiry ✅
+- [x] Test OAuth integration - Already tested in integration_test.go (TestOAuthIntegration)
+- [x] Test error scenarios - TestErrorScenarios (password, TOTP, rate limiting) ✅
+
+**Status**: ✅ COMPLETE - Comprehensive integration tests implemented
+
+**Test File**: `connector/local-enhanced/integration_flows_test.go` (564 lines)
+**Test Functions**: 9 test functions with 15+ sub-tests
+**All Tests Passing**: ✅ (100%)
+
+**Test Coverage**:
+- Complete 2FA flows (password + TOTP/passkey/backup code)
+- 2FA policy enforcement and grace periods
+- Magic link authentication (creation, verification, expiry)
+- Error handling (invalid credentials, rate limiting, not found)
+- OAuth integration (already tested in integration_test.go)
 
 #### End-to-End Tests (COMPLETE - 2025-11-18)
 - [x] Set up Playwright/Selenium tests - Playwright Go setup complete

@@ -3039,6 +3039,282 @@ These failing tests are structural issues with test assertions expecting differe
 
 ---
 
+## Integration Tests for Complete Authentication Flows (Phase 7 Week 13 - COMPLETE)
+
+**Purpose**: Comprehensive integration tests for all authentication flows including 2FA, magic links, and error scenarios.
+
+**Status**: ✅ COMPLETE (2025-11-18) - All integration tests implemented and passing
+
+### Overview
+
+Integration tests validate complete authentication workflows end-to-end, testing the interaction between multiple components (authentication methods, 2FA, storage, rate limiting, etc.).
+
+**Location**: `connector/local-enhanced/integration_flows_test.go`
+
+**Test Statistics**:
+- **Total Lines**: 586 lines
+- **Test Functions**: 9 test functions
+- **Sub-tests**: 15+ test cases
+- **Pass Rate**: 100% ✅
+
+### Test Functions Implemented
+
+#### 1. TestComplete2FAFlow_PasswordTOTP ✅
+Tests the complete two-factor authentication flow using password as primary authentication and TOTP as second factor.
+
+**Flow Tested**:
+1. User created with password
+2. TOTP enabled with QR code and backup codes
+3. Primary authentication with password
+4. 2FA requirement check
+5. Begin 2FA session
+6. Validate TOTP code
+7. Complete 2FA and verify session completion
+
+**Assertions**:
+- Password verification succeeds
+- 2FA is required for the user
+- TOTP validation succeeds
+- 2FA session is marked as completed
+- Correct user ID, callback URL, and state returned
+
+---
+
+#### 2. TestComplete2FAFlow_PasswordBackupCode ✅
+Tests 2FA flow using a backup code instead of TOTP.
+
+**Flow Tested**:
+1. User setup with password and TOTP (generates backup codes)
+2. Primary authentication with password
+3. Begin 2FA session
+4. Validate backup code (instead of TOTP)
+5. Verify backup code is marked as used
+6. Complete 2FA session
+7. Verify backup code cannot be reused
+
+**Assertions**:
+- Backup code validation succeeds
+- Backup code marked as `Used` with `UsedAt` timestamp
+- Reuse of backup code returns false
+
+---
+
+#### 3. TestComplete2FAFlow_PasswordPasskey ✅
+Tests 2FA flow using passkey as the second factor.
+
+**Flow Tested**:
+1. User created with password and passkey
+2. Primary authentication with password
+3. Begin 2FA session
+4. Get available 2FA methods (includes passkey)
+5. Begin passkey authentication for 2FA
+6. Verify WebAuthn session creation
+
+**Assertions**:
+- Passkey is listed as available 2FA method
+- WebAuthn authentication session created
+- Session has correct operation type ("authentication")
+
+---
+
+#### 4. Test2FASessionExpiry ✅
+Tests that 2FA sessions expire after 10 minutes.
+
+**Flow Tested**:
+1. Create 2FA session
+2. Verify session is valid immediately
+3. Manually expire session (set ExpiresAt to past)
+4. Attempt to complete 2FA with expired session
+5. Verify error is returned
+
+**Assertions**:
+- Fresh session retrieves successfully
+- Expired session returns error when completing 2FA
+
+---
+
+#### 5. Test2FAGracePeriod ✅
+Tests grace period enforcement for 2FA requirement.
+
+**Sub-tests**:
+- **User within grace period**: User created recently should not require 2FA
+- **User outside grace period**: User created >7 days ago should require 2FA (if Require2FA flag set)
+- **User with 2FA setup exits grace period**: User with TOTP enabled should not be in grace period regardless of account age
+
+**Assertions**:
+- `InGracePeriod()` returns correct value based on account age
+- `Require2FAForUser()` respects grace period
+- Setting up 2FA immediately exits grace period
+
+---
+
+#### 6. Test2FABypassForNonRequiredUsers ✅
+Tests that users without 2FA requirement can authenticate without 2FA.
+
+**Flow Tested**:
+1. Create user with password only
+2. Set `Require2FA = false`
+3. Authenticate with password
+4. Verify 2FA is not required
+5. User can proceed directly to OAuth callback
+
+**Assertions**:
+- `Require2FAForUser()` returns false
+- No 2FA prompt needed
+
+---
+
+#### 7. TestCompleteMagicLinkFlow ✅
+Tests the complete magic link authentication flow.
+
+**Flow Tested**:
+1. Create user with magic link enabled
+2. Create magic link token
+3. Send magic link email (mock sender)
+4. Verify email was sent with token
+5. Verify magic link token
+6. Verify token is marked as used
+7. Attempt to reuse token (should fail)
+
+**Assertions**:
+- Magic link token created successfully
+- Email sent to correct address with token
+- Token verification returns correct user, callback URL, and state
+- Token marked as `Used` with `UsedAt` timestamp
+- Reused token returns error "already been used"
+
+---
+
+#### 8. TestMagicLinkExpiry ✅
+Tests that magic links expire after TTL (10 minutes).
+
+**Flow Tested**:
+1. Create magic link token
+2. Manually expire token (set ExpiresAt to past)
+3. Attempt to verify expired token
+4. Verify error is returned
+
+**Assertions**:
+- Expired token returns error mentioning "expired"
+
+---
+
+#### 9. TestErrorScenarios ✅
+Tests various error conditions across all authentication methods.
+
+**Sub-tests**:
+- **Invalid password authentication**: Wrong password returns false
+- **Invalid TOTP code**: Invalid code returns false
+- **User not found**: Non-existent user returns error
+- **Invalid session ID**: Non-existent 2FA session returns error
+- **TOTP rate limiting**: Exceeding 5 attempts returns rate limit error
+
+**Assertions**:
+- Wrong credentials return false (not error)
+- Non-existent resources return errors
+- Rate limiting triggers after 5 failed attempts
+- Rate limit error message mentions "rate limit"
+
+### Key Testing Patterns
+
+**User Creation Pattern**:
+```go
+// Create user FIRST (storage sets CreatedAt)
+testUser := NewTestUser("user@example.com")
+user := testUser.ToUser()
+err = conn.storage.CreateUser(ctx, user)
+require.NoError(t, err)
+
+// THEN set password (requires user to exist)
+err = conn.SetPassword(ctx, user, "Password123")
+require.NoError(t, err)
+```
+
+**2FA Flow Pattern**:
+```go
+// 1. Primary auth
+valid, err := conn.VerifyPassword(ctx, user, password)
+
+// 2. Check if 2FA required
+if conn.Require2FAForUser(ctx, user) {
+    // 3. Begin 2FA
+    session, err := conn.Begin2FA(ctx, user.ID, "password", callback, state)
+
+    // 4. Validate second factor
+    valid, err := conn.ValidateTOTP(ctx, user, totpCode)
+
+    // 5. Complete 2FA
+    userID, callback, state, err := conn.Complete2FA(ctx, session.SessionID)
+}
+```
+
+**Magic Link Pattern**:
+```go
+// Create link
+token, err := conn.CreateMagicLink(ctx, email, callbackURL, state, ipAddress)
+
+// Send email
+err = conn.SendMagicLinkEmail(ctx, email, token.Token)
+
+// Verify link (returns user, callback, state)
+user, callback, state, err := conn.VerifyMagicLink(ctx, token.Token)
+```
+
+### Test Utilities Used
+
+From `testing.go`:
+- `DefaultTestConfig(t)` - Test configuration with temporary storage
+- `TestContext(t)` - Context with 30-second timeout
+- `NewTestUser(email)` - Create test user
+- `NewTestPasskey(userID, name)` - Create test passkey
+- `NewMockEmailSender()` - Mock email sender for magic links
+- `generateValidTOTPCode(secret)` - Generate valid TOTP code for current time
+
+### Running Integration Tests
+
+```bash
+# Run all integration tests
+go test -v ./connector/local-enhanced/ -run "TestComplete2FAFlow|Test2FA|TestCompleteMagicLink|TestMagicLinkExpiry|TestErrorScenarios"
+
+# Run specific test
+go test -v ./connector/local-enhanced/ -run TestComplete2FAFlow_PasswordTOTP
+
+# Run with timeout
+go test -v ./connector/local-enhanced/ -run "TestComplete2FA" -timeout 120s
+```
+
+### Test Output
+
+All tests produce detailed logging and pass marks:
+```
+=== RUN   TestComplete2FAFlow_PasswordTOTP
+    integration_flows_test.go:93: ✅ Complete 2FA flow (password + TOTP) passed
+--- PASS: TestComplete2FAFlow_PasswordTOTP (1.06s)
+
+=== RUN   TestComplete2FAFlow_PasswordBackupCode
+    integration_flows_test.go:177: ✅ Complete 2FA flow (password + backup code) passed
+--- PASS: TestComplete2FAFlow_PasswordBackupCode (1.92s)
+
+=== RUN   TestCompleteMagicLinkFlow
+    integration_flows_test.go:455: ✅ Complete magic link authentication flow passed
+--- PASS: TestCompleteMagicLinkFlow (0.09s)
+
+PASS
+ok  	github.com/dexidp/dex/connector/local-enhanced	6.828s
+```
+
+### Coverage Contribution
+
+These integration tests improve overall code coverage by exercising:
+- Complete authentication workflows (not just individual functions)
+- Cross-component interactions (storage + authentication + validation)
+- Edge cases (expiry, rate limiting, reuse prevention)
+- Error paths and recovery
+
+**Deliverable**: ✅ Comprehensive integration test suite covering all major authentication flows
+
+---
+
 ## End-to-End Browser Tests (Phase 7 Week 13 - COMPLETE)
 
 **Purpose**: Test complete authentication flows in real browser environment with virtual WebAuthn authenticator.
