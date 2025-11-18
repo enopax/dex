@@ -10,10 +10,54 @@ import (
 
 // HTTP handler stubs - to be implemented in subsequent phases
 
-// handleLogin displays the login page.
+// handleLogin displays the login page with passkey and password options.
+//
+// This handler is called when Dex redirects the user to our connector for authentication.
+// The state parameter contains the auth request ID from Dex, which must be preserved
+// throughout the authentication flow.
+//
+// The login page should:
+// 1. Display passkey login button (if enabled)
+// 2. Display password login form (if enabled)
+// 3. Call the passkey/password authentication endpoints via JavaScript
+// 4. After successful authentication, redirect to the callback URL with user_id
 func (c *Connector) handleLogin(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement in Phase 2
-	http.Error(w, "Not implemented", http.StatusNotImplemented)
+	// Get state and callback URL from query parameters
+	state := r.URL.Query().Get("state")
+	callbackURL := r.URL.Query().Get("callback")
+
+	if state == "" {
+		c.logger.Error("handleLogin: missing state parameter")
+		http.Error(w, "Missing state parameter", http.StatusBadRequest)
+		return
+	}
+
+	if callbackURL == "" {
+		c.logger.Error("handleLogin: missing callback parameter")
+		http.Error(w, "Missing callback parameter", http.StatusBadRequest)
+		return
+	}
+
+	// For now, render a simple login page
+	// In Phase 2 Week 7, this will use the actual HTML templates
+	c.logger.Infof("handleLogin: displaying login page (state: %s)", state)
+
+	// TODO: Render the actual login template from templates/login.html
+	// For now, just show a placeholder
+	w.Header().Set("Content-Type", "text/html")
+	w.Write([]byte(`<!DOCTYPE html>
+<html>
+<head>
+	<title>Login - Enopax</title>
+</head>
+<body>
+	<h1>Login to Enopax</h1>
+	<p>This page will display passkey and password login options.</p>
+	<p>State: ` + state + `</p>
+	<p>Callback: ` + callbackURL + `</p>
+	<p>Implementation in progress...</p>
+</body>
+</html>`))
 }
 
 // handlePasswordLogin handles password-based login.

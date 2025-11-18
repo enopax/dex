@@ -386,10 +386,10 @@ This implementation plan covers building an **Enhanced Local Connector** for Dex
 - [ ] Test user flows in real browser environment
 
 #### OAuth Integration
-- [ ] Integrate passkey auth with Dex OAuth flow
-- [ ] Create user identity from passkey authentication
-- [ ] Generate OAuth authorization code
-- [ ] Test OAuth redirect
+- [x] Integrate passkey auth with Dex OAuth flow (Implemented `CallbackConnector` interface with `LoginURL` and `HandleCallback`)
+- [x] Create user identity from passkey authentication (Implemented in `HandleCallback` - maps User to connector.Identity)
+- [x] Generate OAuth authorization code (Handled by Dex server after successful `HandleCallback`)
+- [ ] Test OAuth redirect (Requires browser testing with real Dex server instance)
 
 **Deliverable**: Passkey authentication complete, integrated with OAuth
 

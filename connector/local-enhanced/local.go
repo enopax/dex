@@ -8,6 +8,7 @@ package local
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -60,16 +61,55 @@ func New(config *Config, logger logrus.FieldLogger) (*Connector, error) {
 }
 
 // LoginURL returns the URL to redirect the user to for authentication.
+// This is called by Dex's OAuth flow to initiate the login.
 func (c *Connector) LoginURL(callbackURL, state string) (string, error) {
-	// Return URL to our login page
-	return c.config.BaseURL + "/login?state=" + state + "&callback=" + callbackURL, nil
+	// Build URL to our login page with state parameter
+	// The state parameter is the auth request ID from Dex
+	loginURL := c.config.BaseURL + "/login?state=" + state + "&callback=" + callbackURL
+	c.logger.Infof("LoginURL: redirecting to %s", loginURL)
+	return loginURL, nil
 }
 
 // HandleCallback handles the callback from the login flow.
+// This is called after the user successfully authenticates via passkey or password.
 func (c *Connector) HandleCallback(s connector.Scopes, r *http.Request) (connector.Identity, error) {
-	// This will be implemented in the password.go and passkey.go files
-	// For now, return a basic implementation
-	return connector.Identity{}, nil
+	// The callback should include the user_id from our login page
+	// After successful passkey/password authentication, our login page
+	// redirects back to Dex's callback URL with the user_id parameter
+
+	userID := r.URL.Query().Get("user_id")
+	if userID == "" {
+		c.logger.Error("HandleCallback: missing user_id parameter")
+		return connector.Identity{}, fmt.Errorf("missing user_id parameter")
+	}
+
+	// Get user from storage
+	ctx := r.Context()
+	user, err := c.storage.GetUser(ctx, userID)
+	if err != nil {
+		c.logger.Errorf("HandleCallback: failed to get user %s: %v", userID, err)
+		return connector.Identity{}, fmt.Errorf("user not found: %w", err)
+	}
+
+	// Build connector identity
+	identity := connector.Identity{
+		UserID:        user.ID,
+		Username:      user.Username,
+		Email:         user.Email,
+		EmailVerified: user.EmailVerified,
+	}
+
+	// Add preferred username if set
+	if user.DisplayName != "" {
+		identity.PreferredUsername = user.DisplayName
+	} else if user.Username != "" {
+		identity.PreferredUsername = user.Username
+	} else {
+		identity.PreferredUsername = user.Email
+	}
+
+	c.logger.Infof("HandleCallback: authenticated user %s (%s)", user.ID, user.Email)
+	return identity, nil
 }
 
 // Refresh is called when a client attempts to claim a refresh token.
