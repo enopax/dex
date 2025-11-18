@@ -1654,6 +1654,8 @@ type User struct {
 - `TODO.md` - Mark tasks complete `[x]`
 - `CLAUDE.md` - Update if workflow changes (this file)
 - `docs/enhancements/passkey-webauthn-support.md` - Update concept if architecture changes
+- `docs/enhancements/authentication-flows.md` - ✅ COMPLETE (2025-11-18) - Comprehensive authentication flow documentation
+- `docs/enhancements/grpc-api.md` - ✅ COMPLETE - gRPC API reference
 - `README.md` - Update if user-facing changes
 
 ---
