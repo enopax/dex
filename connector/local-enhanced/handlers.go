@@ -39,26 +39,30 @@ func (c *Connector) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// For now, render a simple login page
-	// In Phase 2 Week 7, this will use the actual HTML templates
 	c.logger.Infof("handleLogin: displaying login page (state: %s)", state)
 
-	// TODO: Render the actual login template from templates/login.html
-	// For now, just show a placeholder
-	w.Header().Set("Content-Type", "text/html")
-	w.Write([]byte(`<!DOCTYPE html>
-<html>
-<head>
-	<title>Login - Enopax</title>
-</head>
-<body>
-	<h1>Login to Enopax</h1>
-	<p>This page will display passkey and password login options.</p>
-	<p>State: ` + state + `</p>
-	<p>Callback: ` + callbackURL + `</p>
-	<p>Implementation in progress...</p>
-</body>
-</html>`))
+	// Prepare template data
+	data := map[string]interface{}{
+		"PasskeyEnabled":     c.config.Passkey.Enabled,
+		"MagicLinkEnabled":   c.config.MagicLink.Enabled,
+		"PostURL":            c.config.BaseURL + "/login/password",
+		"PasskeyBeginURL":    c.config.BaseURL + "/passkey/login/begin",
+		"PasskeyFinishURL":   c.config.BaseURL + "/passkey/login/finish",
+		"MagicLinkSendURL":   c.config.BaseURL + "/magic-link/send",
+		"CallbackURL":        callbackURL,
+		"State":              state,
+		"UsernamePrompt":     "Email",
+		"Username":           "",
+		"Invalid":            false,
+		"BackLink":           "",
+	}
+
+	// Render login template
+	if err := c.templates.RenderLogin(w, data); err != nil {
+		c.logger.Errorf("Failed to render login template: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
 }
 
 // handlePasswordLogin handles password-based login.
@@ -1115,10 +1119,12 @@ func (c *Connector) handle2FAPrompt(w http.ResponseWriter, r *http.Request) {
 		Invalid:             r.URL.Query().Get("error") == "invalid",
 	}
 
-	// TODO: Render template with data
-	// For now, return JSON (template implementation pending)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(data)
+	// Render 2FA prompt template
+	if err := c.templates.Render2FAPrompt(w, data); err != nil {
+		c.logger.Errorf("Failed to render 2FA prompt template: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
 }
 
 // handle2FAVerifyTOTP verifies a TOTP code for 2FA.

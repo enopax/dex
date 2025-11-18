@@ -49,7 +49,7 @@ func New(config *Config, logger logrus.FieldLogger) (*Connector, error) {
 	}
 
 	// Load templates
-	templates, err := LoadTemplates(config.TemplateDir)
+	templates, err := LoadTemplates()
 	if err != nil {
 		return nil, err
 	}
@@ -379,29 +379,3 @@ func (t *AuthSetupToken) Validate() error {
 	return nil
 }
 
-// Templates holds parsed HTML templates.
-type Templates struct {
-	Login            string
-	SetupAuth        string
-	ManageCredential string
-}
-
-// RenderSetupAuth renders the setup-auth.html template.
-// For now, this is a placeholder that returns an error.
-// TODO: Implement actual template rendering.
-func (t *Templates) RenderSetupAuth(w http.ResponseWriter, data map[string]interface{}) error {
-	// For now, return a simple HTML page
-	// TODO: Load and render actual template from setup-auth.html
-	return fmt.Errorf("template rendering not yet implemented")
-}
-
-// LoadTemplates loads HTML templates from the template directory.
-func LoadTemplates(templateDir string) (*Templates, error) {
-	// If template directory is empty (for tests), return empty templates
-	if templateDir == "" {
-		return &Templates{}, nil
-	}
-
-	// TODO: Implement actual template loading from files
-	return &Templates{}, nil
-}

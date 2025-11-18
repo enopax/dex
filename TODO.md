@@ -1106,7 +1106,7 @@ Add to `storage_test.go`:
   - [x] Validates auth setup token from storage
   - [x] Retrieves user information
   - [x] Prepares template data for auth method selection
-  - [x] Renders setup-auth.html template (stub - template rendering TODO)
+  - [x] Renders setup-auth.html template ✅ COMPLETE
   - [x] Implemented in handlers.go:handleAuthSetup
 
 - [x] Implement `POST /setup-auth/password`:
@@ -1126,7 +1126,7 @@ Add to `storage_test.go`:
   - [x] Auth setup template already created (templates/setup-auth.html)
   - [x] Passkey setup integrated with existing endpoints
   - [x] Password setup via new endpoint
-  - [x] Template rendering placeholder (returns error - to be implemented)
+  - [x] Template rendering system ✅ COMPLETE (templates.go with embedded templates)
 
 - [x] Write tests
   - [x] TestHandleAuthSetup (4 test cases)
@@ -1172,29 +1172,25 @@ type AuthSetupToken struct {
 - Password setup with validation tested
 - Method-not-allowed enforcement tested
 
-**Note**: Template rendering (RenderSetupAuth) returns placeholder error. Template loading from setup-auth.html to be implemented in future phase.
+**Status**: ✅ COMPLETE (2025-11-18) - Template rendering system fully implemented
+
+**Template System**:
+- `templates.go` - Template loading and rendering system with embedded filesystem
+- Template functions: lower, upper, formatDate, contains
+- All templates loaded from `templates/*.html` using go:embed
+- Render methods: RenderLogin, RenderSetupAuth, RenderManageCredentials, Render2FAPrompt
+
+**Templates Available**:
+- ✅ login.html - Login page with passkey and password options
+- ✅ setup-auth.html - Auth setup page for new users
+- ✅ manage-credentials.html - Credential management page
+- ✅ twofa-prompt.html - 2FA prompt page
 
 #### Auth Setup UI
-- [ ] Create auth setup template:
-  ```html
-  <h1>Choose how to log in</h1>
-
-  <button onclick="setupPasskey()">
-    🔐 Set up Passkey (Recommended)
-  </button>
-
-  <button onclick="setupPassword()">
-    🔑 Set up Password
-  </button>
-
-  <button onclick="setupBoth()">
-    🔒 Set up Both (Most Secure)
-  </button>
-  ```
-
-- [ ] Implement setup flows for each option
-- [ ] Add progress indicators
-- [ ] Test user experience
+- [x] Create auth setup template (setup-auth.html exists and renders)
+- [x] Implement setup flows for each option (passkey and password endpoints working)
+- [ ] Add progress indicators (templates have basic UI, could be enhanced)
+- [ ] Test user experience in browser (requires running Dex server)
 
 #### Platform Integration
 - [x] Document Platform registration API ✅ COMPLETE (2025-11-18)
