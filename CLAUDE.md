@@ -3,7 +3,7 @@
 **Project**: Dex Fork with Enhanced Local Connector
 **Repository**: enopax/dex
 **Branch**: `feature/passkeys` (implementation), `main` (upstream-compatible)
-**Last Updated**: 2025-11-18 (Phase 7 Week 14 - Authentication flows documentation complete)
+**Last Updated**: 2025-11-18 (Phase 7 Week 14 - Configuration documentation complete)
 
 ---
 
@@ -120,6 +120,7 @@ make build
 | **docs/enhancements/authentication-flows.md** | Complete authentication flow documentation | Understanding authentication flows |
 | **docs/enhancements/grpc-api.md** | gRPC API reference and examples | Platform integration |
 | **docs/enhancements/platform-integration.md** | Platform developer integration guide (TypeScript/Next.js) | Integrating with Platform |
+| **docs/enhancements/configuration-guide.md** | Comprehensive configuration reference for all settings | Deploying to production |
 | **docs/enhancements/storage-schema.md** | Storage schema and file formats | Before implementing storage |
 
 ---
