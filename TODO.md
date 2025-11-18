@@ -1385,8 +1385,14 @@ make test-e2e-short
   - Comprehensive guide with gRPC client setup, user registration, OAuth integration
   - Includes TypeScript examples for Next.js Platform
   - Complete error handling and security considerations
-- [ ] Create migration guide from old local connector
-- [ ] Document configuration options
+- [x] Create migration guide from old local connector ✅ COMPLETE (2025-11-18)
+  - Created comprehensive migration guide (docs/enhancements/migration-guide.md)
+  - Covers pre-migration checklist, step-by-step migration, data migration
+  - Includes troubleshooting, rollback plan, and post-migration tasks
+  - Created migration script (scripts/migrate-users.sh)
+  - Documented user ID generation algorithm and configuration examples
+- [x] Document configuration options ✅ COMPLETE (2025-11-18)
+  - Already completed in Configuration Documentation section above
 - [ ] Add architecture diagrams
 
 #### Configuration Documentation

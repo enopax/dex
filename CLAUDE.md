@@ -121,6 +121,7 @@ make build
 | **docs/enhancements/grpc-api.md** | gRPC API reference and examples | Platform integration |
 | **docs/enhancements/platform-integration.md** | Platform developer integration guide (TypeScript/Next.js) | Integrating with Platform |
 | **docs/enhancements/configuration-guide.md** | Comprehensive configuration reference for all settings | Deploying to production |
+| **docs/enhancements/migration-guide.md** | Migration from old local connector to enhanced connector | Migrating existing users |
 | **docs/enhancements/storage-schema.md** | Storage schema and file formats | Before implementing storage |
 
 ---
