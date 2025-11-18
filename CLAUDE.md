@@ -2811,12 +2811,224 @@ These failing tests are structural issues with test assertions expecting differe
 
 - [ ] Fix 2FA handler test assertions to match actual handler behavior (HTTP 303 See Other redirects)
 - [ ] Implement template rendering for auth setup flow
-- [ ] Browser testing with virtual authenticator (Chrome DevTools)
-- [ ] Cross-browser compatibility testing
+- [x] Browser testing with virtual authenticator (Chrome DevTools) - ✅ COMPLETE (2025-11-18)
+- [ ] Cross-browser compatibility testing (Firefox, Safari, Edge)
 - [ ] Integration tests for complete flows (optional - would bring coverage to ~82%)
 
 ---
 
+## End-to-End Browser Tests (Phase 7 Week 13 - COMPLETE)
+
+**Purpose**: Test complete authentication flows in real browser environment with virtual WebAuthn authenticator.
+
+**Status**: ✅ COMPLETE (2025-11-18) - Comprehensive browser tests implemented with Playwright
+
+### Overview
+
+End-to-end browser tests validate the complete passkey registration and authentication flows using Playwright for Go with a virtual WebAuthn authenticator.
+
+**Location**: `e2e/` directory
+
+**Test Infrastructure**:
+- Playwright for Go (`github.com/playwright-community/playwright-go`)
+- Chromium browser with headless mode
+- Virtual WebAuthn authenticator via Chrome DevTools Protocol (CDP)
+- Isolated browser contexts for test independence
+
+### Test Files
+
+1. **`e2e/setup_test.go`** - Test infrastructure and setup
+   - `TestMain` - Playwright installation and initialization
+   - `setupBrowser()` - Browser instance creation
+   - `setupVirtualAuthenticator()` - Virtual authenticator configuration via CDP
+   - `teardownBrowser()` - Cleanup resources
+   - `getTestConfig()` - Test configuration from environment
+
+2. **`e2e/passkey_registration_test.go`** - Passkey registration tests
+   - `TestPasskeyRegistration` - UI-based registration flow
+   - `TestPasskeyRegistrationBeginEndpoint` - Begin endpoint direct testing
+   - `TestPasskeyRegistrationWithActualWebAuthn` - Complete WebAuthn ceremony
+
+3. **`e2e/passkey_authentication_test.go`** - Passkey authentication tests
+   - `TestPasskeyAuthentication` - UI-based authentication flow
+   - `TestPasskeyAuthenticationBeginEndpoint` - Begin endpoint direct testing
+   - `TestPasskeyAuthenticationWithActualWebAuthn` - Complete WebAuthn ceremony
+   - `TestPasskeyDiscoverableCredentials` - Passwordless authentication
+
+4. **`e2e/oauth_integration_test.go`** - OAuth integration tests
+   - `TestOAuthPasskeyFlow` - Complete OAuth flow with passkey
+   - `TestOAuthPasswordFlow` - OAuth flow with password authentication
+   - `TestOAuthStateValidation` - State parameter preservation
+   - `TestOAuthErrorHandling` - Invalid client ID, redirect URI
+   - `TestOAuthFlowWithLoginHint` - Pre-filled email from login_hint
+
+5. **`e2e/README.md`** - Comprehensive documentation (400+ lines)
+
+### Virtual Authenticator Configuration
+
+The virtual authenticator is configured via Chrome DevTools Protocol (CDP):
+
+```go
+params := map[string]interface{}{
+    "options": map[string]interface{}{
+        "protocol":            "ctap2",       // Modern WebAuthn protocol
+        "transport":           "internal",    // Platform authenticator
+        "hasUserVerification": true,          // Supports user verification
+        "isUserVerified":      true,          // Auto-verify for testing
+        "hasResidentKey":      true,          // Supports discoverable credentials
+    },
+}
+```
+
+**Benefits**:
+- No physical hardware required (Touch ID, security key)
+- Consistent behavior across test runs
+- Automatic user verification (no manual PIN/biometric)
+- Resident key support for passwordless testing
+
+### Running E2E Tests
+
+**Prerequisites**:
+1. Install Playwright browsers: `make install-playwright`
+2. Start Dex server: `./bin/dex serve config.dev.yaml`
+
+**Commands**:
+```bash
+# Run all e2e tests
+make test-e2e
+
+# Skip e2e tests (in short mode)
+make test-e2e-short
+
+# Run specific test
+go test -v ./e2e/ -run TestPasskeyRegistration
+
+# Run with visible browser (debugging)
+# Edit e2e/setup_test.go: Headless: playwright.Bool(false)
+```
+
+**Environment Configuration**:
+```bash
+export DEX_URL=http://localhost:5556  # Dex server URL
+```
+
+### Test Scenarios Covered
+
+1. **Passkey Registration**:
+   - Navigate to auth setup page
+   - Click "Set up Passkey" button
+   - Enter passkey name
+   - Complete WebAuthn ceremony with virtual authenticator
+   - Verify registration success
+
+2. **Passkey Authentication**:
+   - Navigate to login page with OAuth parameters
+   - Click "Login with Passkey" button
+   - Complete WebAuthn authentication ceremony
+   - Verify redirect to OAuth callback with authorization code
+   - Verify state parameter preservation
+
+3. **WebAuthn API Direct Testing**:
+   - Call `/passkey/register/begin` endpoint
+   - Parse `PublicKeyCredentialCreationOptions`
+   - Call `navigator.credentials.create()` with virtual authenticator
+   - Call `/passkey/register/finish` with credential
+   - Verify server returns `passkey_id`
+
+4. **OAuth Integration**:
+   - Initiate OAuth authorization request
+   - Select local-enhanced connector
+   - Authenticate with passkey
+   - Verify callback with authorization code
+   - Verify state parameter preservation
+
+5. **Discoverable Credentials**:
+   - Call `/passkey/login/begin` WITHOUT email
+   - Verify `allowCredentials` is empty
+   - Platform authenticator returns user information
+   - Passwordless authentication succeeds
+
+6. **Error Handling**:
+   - Invalid OAuth client ID
+   - Invalid redirect URI
+   - Missing required parameters
+
+### Test Results
+
+**Total Test Functions**: 12 (across 3 test files)
+- Passkey registration: 3 test functions
+- Passkey authentication: 4 test functions
+- OAuth integration: 5 test functions
+
+**Coverage**:
+- ✅ Complete WebAuthn registration ceremony
+- ✅ Complete WebAuthn authentication ceremony
+- ✅ OAuth flow integration
+- ✅ Discoverable credentials (passwordless)
+- ✅ Error scenarios
+- ⚠️ Cross-browser testing (Chromium only)
+- ⚠️ Mobile browser testing (deferred)
+
+### Debugging Browser Tests
+
+**View Browser Actions**:
+```go
+// In setup_test.go
+browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
+    Headless: playwright.Bool(false),  // Show browser
+    SlowMo:   playwright.Float(500),   // Slow down by 500ms
+})
+```
+
+**Capture Screenshots**:
+```go
+if t.Failed() {
+    page.Screenshot(playwright.PageScreenshotOptions{
+        Path: playwright.String("failure.png"),
+    })
+}
+```
+
+**Console Logs**:
+```go
+page.On("console", func(msg playwright.ConsoleMessage) {
+    t.Logf("Browser: %s: %s", msg.Type(), msg.Text())
+})
+```
+
+### CI/CD Integration
+
+**GitHub Actions Example**:
+```yaml
+- name: Install Playwright
+  run: make install-playwright
+
+- name: Start Dex Server
+  run: ./bin/dex serve config.dev.yaml &
+
+- name: Run E2E Tests
+  run: make test-e2e
+```
+
+### Limitations
+
+- **Chromium Only**: Virtual authenticators are Chromium-specific
+- **No Physical Hardware**: Can't test actual Touch ID, Windows Hello
+- **Dev Environment**: Requires running Dex server
+- **Network**: Tests assume localhost, not production URLs
+
+### Future Enhancements
+
+- [ ] Cross-browser testing (Firefox, Safari via Playwright)
+- [ ] Mobile browser testing (iOS Safari, Android Chrome)
+- [ ] Visual regression testing (screenshot comparison)
+- [ ] Performance benchmarks (authentication latency)
+- [ ] Network failure simulation (offline mode)
+
+**Deliverable**: ✅ Comprehensive browser tests with virtual authenticator complete
+
+---
+
 **Last Updated**: 2025-11-18
-**Version**: 1.3
+**Version**: 1.4
 **Maintainer**: Enopax Platform Team

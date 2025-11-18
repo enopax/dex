@@ -146,6 +146,21 @@ test-local-enhanced-coverage: ## Run enhanced local connector tests with coverag
 test-local-enhanced-race: ## Run enhanced local connector tests with race detection.
 	@go test -v --race ./connector/local-enhanced/...
 
+.PHONY: test-e2e
+test-e2e: ## Run end-to-end browser tests.
+	@echo "Running end-to-end browser tests..."
+	@echo "Note: These tests require a running Dex server"
+	@go test -v ./e2e/...
+
+.PHONY: test-e2e-short
+test-e2e-short: ## Skip end-to-end browser tests.
+	@go test -short ./e2e/...
+
+.PHONY: install-playwright
+install-playwright: ## Install Playwright browsers.
+	@echo "Installing Playwright browsers..."
+	@go run github.com/playwright-community/playwright-go/cmd/playwright@latest install chromium
+
 .PHONY: lint
 lint: ## Run linter.
 	@golangci-lint version

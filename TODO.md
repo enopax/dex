@@ -1305,13 +1305,44 @@ type AuthSetupToken struct {
 - [ ] Test OAuth integration
 - [ ] Test error scenarios
 
-#### End-to-End Tests
-- [ ] Set up Playwright/Selenium tests
-- [ ] Test passkey registration in real browser
-- [ ] Test passkey authentication in real browser
-- [ ] Test with virtual authenticator (Chrome DevTools)
-- [ ] Test on multiple browsers (Chrome, Safari, Firefox, Edge)
-- [ ] Test on multiple platforms (Windows, macOS, Linux, iOS, Android)
+#### End-to-End Tests (COMPLETE - 2025-11-18)
+- [x] Set up Playwright/Selenium tests - Playwright Go setup complete
+- [x] Test passkey registration in real browser - TestPasskeyRegistration implemented
+- [x] Test passkey authentication in real browser - TestPasskeyAuthentication implemented
+- [x] Test with virtual authenticator (Chrome DevTools) - Virtual authenticator configured via CDP
+- [ ] Test on multiple browsers (Chrome, Safari, Firefox, Edge) - Currently Chromium only
+- [ ] Test on multiple platforms (Windows, macOS, Linux, iOS, Android) - Platform-specific testing deferred
+
+**Status**: ✅ Core browser tests complete with virtual authenticator
+
+**Files Created**:
+- `e2e/setup_test.go` - Test infrastructure and virtual authenticator setup
+- `e2e/passkey_registration_test.go` - Registration flow tests (3 test functions)
+- `e2e/passkey_authentication_test.go` - Authentication flow tests (4 test functions)
+- `e2e/oauth_integration_test.go` - OAuth integration tests (5 test functions)
+- `e2e/README.md` - Comprehensive documentation (400+ lines)
+
+**Features**:
+- Virtual WebAuthn authenticator via Chrome DevTools Protocol
+- Complete passkey registration ceremony with `navigator.credentials.create()`
+- Complete passkey authentication ceremony with `navigator.credentials.get()`
+- OAuth flow integration testing
+- Discoverable credentials (passwordless) testing
+- Error handling tests (invalid client, redirect URI)
+
+**Running Tests**:
+```bash
+# Install Playwright browsers
+make install-playwright
+
+# Run e2e tests (requires running Dex server)
+make test-e2e
+
+# Skip e2e tests
+make test-e2e-short
+```
+
+**Note**: Tests require a running Dex server at http://localhost:5556 (configurable via DEX_URL env var)
 
 #### Performance Tests
 - [ ] Load test authentication endpoints
