@@ -822,71 +822,107 @@ Add to `storage_test.go`:
 
 ## Phase 4: Magic Link
 
-### Week 10: Magic Link Authentication
+### Week 10: Magic Link Authentication (COMPLETE - 2025-11-18)
+
+**Status**: ✅ COMPLETE - Magic link implementation finished with comprehensive tests
 
 #### Magic Link Implementation
-- [ ] Implement token generation:
-  ```go
-  type MagicLinkToken struct {
-      Token      string
-      UserID     string
-      Email      string
-      CreatedAt  time.Time
-      ExpiresAt  time.Time
-      Used       bool
-      IPAddress  string
-  }
-  ```
+- [x] Implement token generation (magiclink.go):
+  - [x] MagicLinkToken struct with all required fields (Token, UserID, Email, CreatedAt, ExpiresAt, Used, UsedAt, IPAddress, CallbackURL, State)
+  - [x] Token validation method
+  - [x] IsExpired() helper method
+  - [x] generateMagicLinkToken() - cryptographically secure 32-byte tokens
 
-- [ ] Create `POST /auth/magic-link/send`:
-  ```go
-  func (c *Connector) SendMagicLink(w http.ResponseWriter, r *http.Request) {
-      // 1. Get email from request
-      // 2. Check rate limit
-      // 3. Generate secure token
-      // 4. Send email
-      // 5. Store token
-  }
-  ```
+- [x] Create `POST /magic-link/send` (handlers.go:869-960):
+  - [x] Email validation
+  - [x] Rate limiting check (3/hour, 10/day)
+  - [x] Token generation via CreateMagicLink()
+  - [x] Email sending via SendMagicLinkEmail()
+  - [x] IP address capture
+  - [x] OAuth state and callback preservation
 
-- [ ] Implement `GET /auth/magic-link/verify?token=...`:
-  ```go
-  func (c *Connector) VerifyMagicLink(w http.ResponseWriter, r *http.Request) {
-      // 1. Validate token
-      // 2. Check expiry (10 minutes)
-      // 3. Mark as used
-      // 4. Create OAuth session
-      // 5. Redirect to OAuth flow
-  }
-  ```
+- [x] Implement `GET /magic-link/verify` (handlers.go:963-1021):
+  - [x] Token validation via VerifyMagicLink()
+  - [x] Expiry check (10 minutes TTL)
+  - [x] Mark token as used (one-time use)
+  - [x] Update user's last login timestamp
+  - [x] 2FA integration (redirects to 2FA prompt if required)
+  - [x] OAuth redirect with user_id parameter
 
-- [ ] Add email rate limiting (3/hour, 10/day)
-- [ ] Implement IP binding (optional security)
-- [ ] Write tests
+- [x] Add email rate limiting (3/hour, 10/day)
+  - [x] MagicLinkRateLimiter implementation (magiclink.go:75-167)
+  - [x] Per-email rate limiting
+  - [x] Automatic cleanup of old attempts
+  - [x] Reset on successful authentication
+
+- [x] Implement IP binding
+  - [x] IP address captured in token
+  - [x] Available for security enhancement (not enforced by default)
+
+- [x] Write tests (magiclink_test.go):
+  - [x] TestMagicLinkToken_Validate (7 test cases)
+  - [x] TestMagicLinkToken_IsExpired (3 test cases)
+  - [x] TestMagicLinkRateLimiter (4 test cases)
+  - [x] TestGenerateMagicLinkToken (uniqueness test)
+  - [x] TestCreateMagicLink (4 test cases)
+  - [x] TestVerifyMagicLink (4 test cases)
+  - [x] TestSendMagicLinkEmail (2 test cases)
+  - [x] TestMagicLinkJWT (4 test cases - alternative JWT implementation)
+  - [x] TestMagicLinkIntegration (2 test cases - complete flow)
+  - [x] All tests passing ✅
 
 #### Email Integration
-- [ ] Configure SMTP settings
-- [ ] Create magic link email template:
-  ```html
-  <h1>Your Enopax login link</h1>
-  <p>Click the link below to log in:</p>
-  <a href="https://auth.enopax.io/auth/magic-link/verify?token=...">
-    Log in to Enopax
-  </a>
-  <p>This link expires in 10 minutes.</p>
-  ```
+- [x] Configure SMTP settings (config.go:112-140)
+  - [x] EmailConfig struct with SMTP settings
+  - [x] Validation in Config.Validate()
+  - [x] Default config with SMTP example
 
-- [ ] Implement email sending
-- [ ] Add email delivery error handling
-- [ ] Test email delivery
+- [x] Create magic link email template (magiclink.go:260-310):
+  - [x] HTML email with styled button
+  - [x] Includes magic link URL
+  - [x] Shows expiry time (10 minutes)
+  - [x] Security warning
+  - [x] Responsive design
+
+- [x] Implement email sending (magiclink.go:259-291)
+  - [x] SendMagicLinkEmail() method
+  - [x] EmailSender interface for abstraction
+  - [x] SetEmailSender() for dependency injection
+  - [x] Mock email sender for testing
+
+- [x] Add email delivery error handling
+  - [x] Error handling in SendMagicLinkEmail()
+  - [x] Error logging
+  - [x] HTTP 500 on email failure
+
+- [x] Test email delivery
+  - [x] Mock email sender in tests
+  - [x] Email content validation
+  - [x] Integration test with email sending
 
 #### Magic Link UI
-- [ ] Add "Send magic link" option to login page
-- [ ] Create "Check your email" confirmation page
-- [ ] Add link expiry message
-- [ ] Test user flow
+- [ ] Add "Send magic link" option to login page (deferred to template implementation)
+- [ ] Create "Check your email" confirmation page (deferred)
+- [ ] Add link expiry message (included in email template)
+- [ ] Test user flow in browser (pending browser testing)
 
-**Deliverable**: Magic link authentication working
+#### Additional Features Implemented
+- [x] JWT-based magic links (alternative to random tokens)
+  - [x] GenerateJWTMagicLink() method
+  - [x] ValidateJWTMagicLink() method
+  - [x] Comprehensive tests for JWT implementation
+
+- [x] Storage integration (storage.go already implemented)
+  - [x] SaveMagicLinkToken()
+  - [x] GetMagicLinkToken()
+  - [x] DeleteMagicLinkToken()
+
+- [x] Integration with connector
+  - [x] MagicLinkRateLimiter initialized in connector
+  - [x] Cleanup goroutine for rate limiter
+  - [x] EmailSender interface for testability
+
+**Deliverable**: ✅ Magic link authentication working (core functionality complete, UI templates deferred)
 
 ---
 

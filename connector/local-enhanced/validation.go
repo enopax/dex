@@ -217,45 +217,6 @@ func (w *WebAuthnSession) Validate() error {
 	return nil
 }
 
-// Validate validates the MagicLinkToken struct.
-func (m *MagicLinkToken) Validate() error {
-	if m.Token == "" {
-		return errors.New("magic link token cannot be empty")
-	}
-
-	if m.UserID == "" {
-		return errors.New("magic link user ID cannot be empty")
-	}
-
-	if m.Email == "" {
-		return errors.New("magic link email cannot be empty")
-	}
-
-	// Validate email format
-	if err := ValidateEmail(m.Email); err != nil {
-		return fmt.Errorf("invalid magic link: %w", err)
-	}
-
-	// Validate timestamps
-	if m.CreatedAt.IsZero() {
-		return errors.New("magic link created_at timestamp is required")
-	}
-
-	if m.ExpiresAt.IsZero() {
-		return errors.New("magic link expires_at timestamp is required")
-	}
-
-	if m.ExpiresAt.Before(m.CreatedAt) {
-		return errors.New("magic link expires_at cannot be before created_at")
-	}
-
-	// Validate that token hasn't already expired
-	if time.Now().After(m.ExpiresAt) {
-		return errors.New("magic link token has already expired")
-	}
-
-	return nil
-}
 
 // ValidateEmail validates an email address format.
 func ValidateEmail(email string) error {

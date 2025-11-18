@@ -867,20 +867,164 @@ func (c *Connector) handleTOTPValidate(w http.ResponseWriter, r *http.Request) {
 
 // handleMagicLinkSend sends a magic link to the user's email.
 func (c *Connector) handleMagicLinkSend(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement in Phase 4 Week 10
-	http.Error(w, "Not implemented", http.StatusNotImplemented)
+	ctx := r.Context()
+
+	// Only allow POST
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Check if magic links are enabled
+	if !c.config.MagicLink.Enabled {
+		c.logger.Warn("handleMagicLinkSend: magic links are disabled")
+		http.Error(w, "Magic link authentication is disabled", http.StatusForbidden)
+		return
+	}
+
+	// Parse request body
+	var req struct {
+		Email    string `json:"email"`
+		Callback string `json:"callback"`
+		State    string `json:"state"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		c.logger.Errorf("handleMagicLinkSend: failed to decode request: %v", err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate required fields
+	if req.Email == "" {
+		http.Error(w, "Email is required", http.StatusBadRequest)
+		return
+	}
+
+	if req.Callback == "" {
+		http.Error(w, "Callback URL is required", http.StatusBadRequest)
+		return
+	}
+
+	if req.State == "" {
+		http.Error(w, "State is required", http.StatusBadRequest)
+		return
+	}
+
+	// Validate email format
+	if err := ValidateEmail(req.Email); err != nil {
+		c.logger.Errorf("handleMagicLinkSend: invalid email: %v", err)
+		http.Error(w, "Invalid email address", http.StatusBadRequest)
+		return
+	}
+
+	// Check rate limit
+	if !c.magicLinkRateLimiter.Allow(req.Email) {
+		c.logger.Warnf("handleMagicLinkSend: rate limit exceeded for email: %s", req.Email)
+		http.Error(w, "Too many requests. Please try again later.", http.StatusTooManyRequests)
+		return
+	}
+
+	// Get IP address
+	ipAddress := r.RemoteAddr
+	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+		ipAddress = forwarded
+	}
+
+	// Create magic link token
+	token, err := c.CreateMagicLink(ctx, req.Email, req.Callback, req.State, ipAddress)
+	if err != nil {
+		c.logger.Errorf("handleMagicLinkSend: failed to create magic link: %v", err)
+		http.Error(w, "Failed to create magic link", http.StatusInternalServerError)
+		return
+	}
+
+	// Build magic link URL
+	magicLinkURL := fmt.Sprintf("%s/magic-link/verify?token=%s", c.config.BaseURL, token.Token)
+
+	// Send email
+	if err := c.SendMagicLinkEmail(ctx, req.Email, magicLinkURL); err != nil {
+		c.logger.Errorf("handleMagicLinkSend: failed to send email: %v", err)
+		http.Error(w, "Failed to send magic link email", http.StatusInternalServerError)
+		return
+	}
+
+	c.logger.Infof("handleMagicLinkSend: magic link sent to %s", req.Email)
+
+	// Return success
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": fmt.Sprintf("Magic link sent to %s", req.Email),
+	})
 }
 
 // handleMagicLinkVerify verifies a magic link token.
 func (c *Connector) handleMagicLinkVerify(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement in Phase 4 Week 10
-	http.Error(w, "Not implemented", http.StatusNotImplemented)
+	ctx := r.Context()
+
+	// Only allow GET
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Check if magic links are enabled
+	if !c.config.MagicLink.Enabled {
+		c.logger.Warn("handleMagicLinkVerify: magic links are disabled")
+		http.Error(w, "Magic link authentication is disabled", http.StatusForbidden)
+		return
+	}
+
+	// Get token from query parameter
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		c.logger.Error("handleMagicLinkVerify: missing token parameter")
+		http.Error(w, "Missing token parameter", http.StatusBadRequest)
+		return
+	}
+
+	// Verify token
+	user, callbackURL, state, err := c.VerifyMagicLink(ctx, token)
+	if err != nil {
+		c.logger.Errorf("handleMagicLinkVerify: verification failed: %v", err)
+		http.Error(w, "Invalid or expired magic link", http.StatusUnauthorized)
+		return
+	}
+
+	// Reset rate limiter for this email (successful auth)
+	c.magicLinkRateLimiter.Reset(user.Email)
+
+	c.logger.Infof("handleMagicLinkVerify: magic link verified for user %s (email: %s)", user.ID, user.Email)
+
+	// Check if 2FA is required
+	if c.Require2FAForUser(ctx, user) {
+		// User requires 2FA - create 2FA session
+		session, err := c.Begin2FA(ctx, user.ID, "magic_link", callbackURL, state)
+		if err != nil {
+			c.logger.Errorf("handleMagicLinkVerify: failed to begin 2FA: %v", err)
+			http.Error(w, "Failed to initiate 2FA", http.StatusInternalServerError)
+			return
+		}
+
+		// Redirect to 2FA prompt
+		redirectURL := fmt.Sprintf("%s/2fa/prompt?session_id=%s", c.config.BaseURL, session.SessionID)
+		c.logger.Infof("handleMagicLinkVerify: redirecting to 2FA prompt for user %s", user.ID)
+		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+		return
+	}
+
+	// No 2FA required - redirect to OAuth callback with user_id
+	redirectURL := fmt.Sprintf("%s?state=%s&user_id=%s", callbackURL, state, user.ID)
+	c.logger.Infof("handleMagicLinkVerify: redirecting to OAuth callback for user %s", user.ID)
+	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 }
 
 // handleAuthSetup handles the auth setup flow.
 func (c *Connector) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
 	// TODO: Implement in Phase 6 Week 12
-	http.Error(w, "Not implemented", http.StatusNotImplemented)
+	c.logger.Info("handleAuthSetup: not yet implemented")
+	http.Error(w, "Auth setup not yet implemented", http.StatusNotImplemented)
 }
 
 // Helper functions
@@ -1218,3 +1362,4 @@ func (c *Connector) handle2FAVerifyPasskeyFinish(w http.ResponseWriter, r *http.
 		"user_id": user.ID,
 	})
 }
+

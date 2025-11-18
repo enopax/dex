@@ -20,12 +20,14 @@ import (
 
 // Connector implements the connector.Connector and connector.PasswordConnector interfaces.
 type Connector struct {
-	config          *Config
-	storage         Storage
-	webAuthn        *webauthn.WebAuthn
-	logger          logrus.FieldLogger
-	templates       *Templates
-	totpRateLimiter *TOTPRateLimiter
+	config               *Config
+	storage              Storage
+	webAuthn             *webauthn.WebAuthn
+	logger               logrus.FieldLogger
+	templates            *Templates
+	totpRateLimiter      *TOTPRateLimiter
+	magicLinkRateLimiter *MagicLinkRateLimiter
+	emailSender          EmailSender
 }
 
 // New creates a new enhanced local connector.
@@ -55,22 +57,30 @@ func New(config *Config, logger logrus.FieldLogger) (*Connector, error) {
 	// Initialize TOTP rate limiter (5 attempts per 5 minutes)
 	totpRateLimiter := NewTOTPRateLimiter(5, 5*time.Minute)
 
-	// Start cleanup goroutine for rate limiter
+	// Initialize magic link rate limiter
+	magicLinkRateLimiter := NewMagicLinkRateLimiter(
+		config.MagicLink.RateLimit.PerHour,
+		config.MagicLink.RateLimit.PerDay,
+	)
+
+	// Start cleanup goroutines for rate limiters
 	go func() {
 		ticker := time.NewTicker(10 * time.Minute)
 		defer ticker.Stop()
 		for range ticker.C {
 			totpRateLimiter.Cleanup()
+			magicLinkRateLimiter.Cleanup()
 		}
 	}()
 
 	return &Connector{
-		config:          config,
-		storage:         storage,
-		webAuthn:        webAuthn,
-		logger:          logger,
-		templates:       templates,
-		totpRateLimiter: totpRateLimiter,
+		config:               config,
+		storage:              storage,
+		webAuthn:             webAuthn,
+		logger:               logger,
+		templates:            templates,
+		totpRateLimiter:      totpRateLimiter,
+		magicLinkRateLimiter: magicLinkRateLimiter,
 	}, nil
 }
 
@@ -306,8 +316,17 @@ type MagicLinkToken struct {
 	// Used indicates whether this token has been used
 	Used bool `json:"used"`
 
+	// UsedAt is when the token was used (if Used is true)
+	UsedAt *time.Time `json:"used_at,omitempty"`
+
 	// IPAddress is the IP address that requested the magic link
 	IPAddress string `json:"ip_address,omitempty"`
+
+	// CallbackURL is the OAuth callback URL to redirect to after verification
+	CallbackURL string `json:"callback_url"`
+
+	// State is the OAuth state parameter
+	State string `json:"state"`
 }
 
 // Templates holds parsed HTML templates.
