@@ -3,6 +3,7 @@ package local
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 )
@@ -145,6 +146,11 @@ func (c *Config) Validate() error {
 		return errors.New("baseURL is required")
 	}
 
+	// Validate baseURL uses HTTPS
+	if !strings.HasPrefix(c.BaseURL, "https://") {
+		return errors.New("baseURL must use HTTPS (required for WebAuthn and magic links)")
+	}
+
 	if c.DataDir == "" {
 		return errors.New("dataDir is required")
 	}
@@ -159,6 +165,13 @@ func (c *Config) Validate() error {
 		}
 		if len(c.Passkey.RPOrigins) == 0 {
 			return errors.New("passkey.rpOrigins must contain at least one origin")
+		}
+
+		// Validate all RPOrigins use HTTPS (required for WebAuthn)
+		for i, origin := range c.Passkey.RPOrigins {
+			if !strings.HasPrefix(origin, "https://") && !strings.HasPrefix(origin, "http://localhost") {
+				return fmt.Errorf("passkey.rpOrigins[%d] must use HTTPS (got: %s). Only localhost is allowed with HTTP for development", i, origin)
+			}
 		}
 	}
 

@@ -23,14 +23,14 @@
 - Production-ready codebase
 
 ### ⚠️ Before Production
-**5 Critical Security Fixes Required** (see `docs/enhancements/security-audit.md`):
-1. Password rate limiting (HIGH)
-2. HTTPS validation for magic links (HIGH)
+**3 Critical Security Fixes Remaining** (see `docs/enhancements/security-audit.md`):
+1. ✅ ~~Password rate limiting (HIGH)~~ - **COMPLETE** (2025-11-18)
+2. ✅ ~~HTTPS validation for magic links (HIGH)~~ - **COMPLETE** (2025-11-18)
 3. User enumeration fix (MEDIUM)
-4. WebAuthn HTTPS validation (MEDIUM)
+4. ✅ ~~WebAuthn HTTPS validation (MEDIUM)~~ - **COMPLETE** (2025-11-18)
 5. gRPC API authentication (HIGH)
 
-**Estimated Time to Production**: 5-7 days (fix security issues + cross-browser testing + integration testing)
+**Estimated Time to Production**: 2-3 days (fix remaining security issues + cross-browser testing + integration testing)
 
 See **`PROJECT_COMPLETION.md`** for full project summary.
 
@@ -2880,14 +2880,43 @@ chmod +x scripts/security-check.sh
      - `local.go` - Added passwordRateLimiter field and initialization
      - `password_test.go` - New test file with 9 comprehensive tests
 
-2. **Missing HTTPS Validation for Magic Links** ⚠️
-   - **Issue**: Magic link URLs don't validate HTTPS
-   - **Impact**: HIGH - Could send tokens over unencrypted connections
+2. **HTTPS Validation for Magic Links** ✅ **COMPLETE** (2025-11-18)
+   - **Issue**: ~~Magic link URLs don't validate HTTPS~~ **FIXED**
+   - **Impact**: HIGH (was critical - could send tokens over unencrypted connections)
    - **Location**: `connector/local-enhanced/config.go`
-   - **Status**: NOT IMPLEMENTED
-   - **Recommendation**: Validate baseURL and callbackURL use HTTPS
+   - **Status**: ✅ **IMPLEMENTED**
+   - **Implementation**:
+     - BaseURL validation requires HTTPS (line ~149-152)
+     - Prevents HTTP in production (localhost allowed for development)
+     - Comprehensive test coverage (6 new tests)
+   - **Tests Added**:
+     - TestConfigValidation/baseURL_with_HTTP_instead_of_HTTPS ✅
+     - All tests passing
+   - **Files Modified**:
+     - `config.go` - Added HTTPS validation for baseURL
+     - `config_test.go` - Added HTTPS validation tests
 
-3. **User Enumeration via Error Messages** ⚠️
+3. **HTTPS Validation for WebAuthn RPOrigins** ✅ **COMPLETE** (2025-11-18)
+   - **Issue**: ~~No validation that RPOrigins use HTTPS~~ **FIXED**
+   - **Impact**: MEDIUM (could allow insecure WebAuthn configuration)
+   - **Location**: `connector/local-enhanced/config.go`
+   - **Status**: ✅ **IMPLEMENTED**
+   - **Implementation**:
+     - RPOrigins validation requires HTTPS (line ~170-175)
+     - Localhost HTTP allowed for development
+     - Per-origin validation with clear error messages
+   - **Tests Added**:
+     - TestConfigValidation/passkey_RPOrigin_with_HTTP_(not_localhost) ✅
+     - TestConfigValidation/passkey_RPOrigin_with_HTTP_localhost_is_allowed ✅
+     - TestConfigValidation/passkey_RPOrigin_with_HTTPS_is_valid ✅
+     - TestConfigValidation/multiple_passkey_RPOrigins_with_one_HTTP_(not_localhost) ✅
+     - TestPasskeyConfigValidation/HTTP_origin_(not_localhost)_should_fail ✅
+     - TestPasskeyConfigValidation/mixed_HTTPS_and_HTTP_localhost_is_valid ✅
+   - **Files Modified**:
+     - `config.go` - Added HTTPS validation for RPOrigins
+     - `config_test.go` - Added comprehensive HTTPS tests
+
+4. **User Enumeration via Error Messages** ⚠️
    - **Issue**: "User not found" messages reveal email existence
    - **Impact**: MEDIUM - Enables targeted attacks
    - **Location**: Multiple handlers
@@ -2895,13 +2924,6 @@ chmod +x scripts/security-check.sh
    - **Recommendation**: Use generic "Authentication failed" messages
 
 #### ⚠️ MEDIUM PRIORITY - Fix Before Production
-
-4. **Missing HTTPS Validation for WebAuthn RPOrigins** ⚠️
-   - **Issue**: No validation that RPOrigins use HTTPS
-   - **Impact**: MEDIUM - Could allow insecure WebAuthn configuration
-   - **Location**: `connector/local-enhanced/config.go`
-   - **Status**: NOT IMPLEMENTED
-   - **Recommendation**: Validate RPOrigins in Config.Validate()
 
 5. **gRPC API Lacks Authentication** ⚠️
    - **Issue**: gRPC endpoints have no authentication

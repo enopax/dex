@@ -634,93 +634,68 @@ type MagicLinkRateLimiter struct {
 
 ### WebAuthn HTTPS Requirement
 
-**Status**: ✅ **ENFORCED BY SPECIFICATION**
+**Status**: ✅ **IMPLEMENTED** (Fixed 2025-11-18)
 
 **Analysis**:
 - WebAuthn specification requires HTTPS (except localhost)
 - Browser will refuse WebAuthn operations over HTTP
-- No runtime validation needed (browser enforces)
+- Runtime validation added to config validation
 
-**Verification**:
+**Implementation** (Fixed 2025-11-18):
 ```go
-// connector/local-enhanced/config.go (line ~42-50)
-type PasskeyConfig struct {
-    Enabled          bool     `json:"enabled"`
-    RPID             string   `json:"rpID"`             // Must match HTTPS domain
-    RPName           string   `json:"rpName"`
-    RPOrigins        []string `json:"rpOrigins"`        // Must be HTTPS URLs
-    UserVerification string   `json:"userVerification"` // "required", "preferred", "discouraged"
-}
-```
-
-**RPOrigins Validation**:
-
-```go
-// connector/local-enhanced/config.go (line ~195-205)
-func (c *Config) Validate() error {
-    // Passkey validation
-    if c.Passkey.Enabled {
-        if c.Passkey.RPID == "" {
-            return fmt.Errorf("passkey.rpID is required when passkeys are enabled")
-        }
-        for _, origin := range c.Passkey.RPOrigins {
-            // ⚠️ Missing: HTTPS validation for origins
-        }
+// connector/local-enhanced/config.go (line ~170-175)
+// Validate all RPOrigins use HTTPS (required for WebAuthn)
+for i, origin := range c.Passkey.RPOrigins {
+    if !strings.HasPrefix(origin, "https://") && !strings.HasPrefix(origin, "http://localhost") {
+        return fmt.Errorf("passkey.rpOrigins[%d] must use HTTPS (got: %s). Only localhost is allowed with HTTP for development", i, origin)
     }
 }
 ```
 
-**Issue Found**: ⚠️ No validation that RPOrigins use HTTPS
+**Tests Added**:
+- TestConfigValidation/passkey_RPOrigin_with_HTTP_(not_localhost) ✅
+- TestConfigValidation/passkey_RPOrigin_with_HTTP_localhost_is_allowed ✅
+- TestConfigValidation/passkey_RPOrigin_with_HTTPS_is_valid ✅
+- TestConfigValidation/multiple_passkey_RPOrigins_with_one_HTTP_(not_localhost) ✅
+- TestPasskeyConfigValidation/HTTP_origin_(not_localhost)_should_fail ✅
+- TestPasskeyConfigValidation/mixed_HTTPS_and_HTTP_localhost_is_valid ✅
 
-**Recommendation**:
-```go
-// Add HTTPS validation
-for _, origin := range c.Passkey.RPOrigins {
-    if !strings.HasPrefix(origin, "https://") && origin != "http://localhost" {
-        return fmt.Errorf("passkey.rpOrigins must use HTTPS (except localhost): %s", origin)
-    }
-}
-```
-
-**Priority**: **MEDIUM**
+**Priority**: ✅ **COMPLETE**
 
 ### Magic Link HTTPS Requirement
 
-**Status**: ⚠️ **NOT VALIDATED**
+**Status**: ✅ **IMPLEMENTED** (Fixed 2025-11-18)
 
-**Issue**: Magic link URLs don't validate HTTPS
-
+**Implementation** (Fixed 2025-11-18):
 ```go
-// connector/local-enhanced/magiclink.go (line ~260-310)
-func (c *Connector) SendMagicLinkEmail(ctx context.Context, email, token, callbackURL string) error {
-    magicLink := fmt.Sprintf("%s/magic-link/verify?token=%s", c.config.BaseURL, token)
-    // ⚠️ No HTTPS validation for c.config.BaseURL or callbackURL
+// connector/local-enhanced/config.go (line ~149-152)
+// Validate baseURL uses HTTPS
+if !strings.HasPrefix(c.BaseURL, "https://") {
+    return errors.New("baseURL must use HTTPS (required for WebAuthn and magic links)")
 }
 ```
 
-**Recommendation**:
-```go
-// Validate HTTPS in config
-if c.config.BaseURL != "" && !strings.HasPrefix(c.config.BaseURL, "https://") {
-    if !strings.HasPrefix(c.config.BaseURL, "http://localhost") {
-        return fmt.Errorf("baseURL must use HTTPS in production")
-    }
-}
-```
+**Analysis**:
+- Magic links use `c.config.BaseURL` which is now validated to be HTTPS
+- Prevents sending magic link tokens over unencrypted connections
+- Protects against token interception attacks
 
-**Priority**: **HIGH** ⚠️
+**Tests Added**:
+- TestConfigValidation/baseURL_with_HTTP_instead_of_HTTPS ✅
+
+**Priority**: ✅ **COMPLETE**
 
 ### HTTPS Summary
 
 | Component | HTTPS Required | Validated? | Status |
 |-----------|----------------|------------|--------|
 | WebAuthn | Yes (by spec) | By browser | ✅ |
-| WebAuthn RPOrigins | Yes | ⚠️ No | ⚠️ Add validation |
-| Magic link URLs | Yes (recommended) | ❌ No | ⚠️ Add validation |
+| WebAuthn RPOrigins | Yes | ✅ **Fixed 2025-11-18** | ✅ Config validation |
+| Magic link URLs | Yes (recommended) | ✅ **Fixed 2025-11-18** | ✅ Config validation |
 | OAuth callbacks | Yes (Dex enforces) | By Dex | ✅ |
 | gRPC API | Optional (mTLS) | N/A | ℹ️ Document |
 
-**Overall Assessment**: ⚠️ **NEEDS IMPROVEMENT**
+**Overall Assessment**: ✅ **SECURE** (Fixed 2025-11-18)
 
 ---
 

@@ -139,6 +139,45 @@ func TestConfigValidation(t *testing.T) {
 			},
 			expectedErr: "",
 		},
+		{
+			name: "baseURL with HTTP instead of HTTPS",
+			modifyFunc: func(c *Config) {
+				c.BaseURL = "http://auth.enopax.io"
+			},
+			expectedErr: "baseURL must use HTTPS",
+		},
+		{
+			name: "passkey RPOrigin with HTTP (not localhost)",
+			modifyFunc: func(c *Config) {
+				c.Passkey.Enabled = true
+				c.Passkey.RPOrigins = []string{"http://auth.enopax.io"}
+			},
+			expectedErr: "passkey.rpOrigins[0] must use HTTPS",
+		},
+		{
+			name: "passkey RPOrigin with HTTP localhost is allowed",
+			modifyFunc: func(c *Config) {
+				c.Passkey.Enabled = true
+				c.Passkey.RPOrigins = []string{"http://localhost:3000"}
+			},
+			expectedErr: "",
+		},
+		{
+			name: "passkey RPOrigin with HTTPS is valid",
+			modifyFunc: func(c *Config) {
+				c.Passkey.Enabled = true
+				c.Passkey.RPOrigins = []string{"https://auth.enopax.io"}
+			},
+			expectedErr: "",
+		},
+		{
+			name: "multiple passkey RPOrigins with one HTTP (not localhost)",
+			modifyFunc: func(c *Config) {
+				c.Passkey.Enabled = true
+				c.Passkey.RPOrigins = []string{"https://auth.enopax.io", "http://bad.example.com"}
+			},
+			expectedErr: "passkey.rpOrigins[1] must use HTTPS",
+		},
 	}
 
 	for _, tt := range tests {
@@ -264,6 +303,22 @@ func TestPasskeyConfigValidation(t *testing.T) {
 			rpName:           "Local Dev",
 			rpOrigins:        []string{"http://localhost:3000"},
 			userVerification: "discouraged",
+			shouldFail:       false,
+		},
+		{
+			name:             "HTTP origin (not localhost) should fail",
+			rpID:             "auth.enopax.io",
+			rpName:           "Enopax",
+			rpOrigins:        []string{"http://auth.enopax.io"},
+			userVerification: "preferred",
+			shouldFail:       true,
+		},
+		{
+			name:             "mixed HTTPS and HTTP localhost is valid",
+			rpID:             "auth.enopax.io",
+			rpName:           "Enopax",
+			rpOrigins:        []string{"https://auth.enopax.io", "http://localhost:5556"},
+			userVerification: "preferred",
 			shouldFail:       false,
 		},
 	}
