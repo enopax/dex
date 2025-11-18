@@ -217,7 +217,6 @@ func (w *WebAuthnSession) Validate() error {
 	return nil
 }
 
-
 // ValidateEmail validates an email address format.
 func ValidateEmail(email string) error {
 	if email == "" {

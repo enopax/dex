@@ -6,8 +6,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/pquerna/otp/totp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -853,6 +857,438 @@ func TestParseCredentialAssertionResponse(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
+		})
+	}
+}
+
+// ============================================================
+// 2FA Handler Tests
+// ============================================================
+
+func TestHandle2FAPrompt(t *testing.T) {
+	// Setup
+	config := DefaultTestConfig(t)
+	config.TwoFactor.Required = true
+	config.TwoFactor.Methods = []string{"totp", "passkey"}
+	defer CleanupTestStorage(t, config.DataDir)
+
+	connector, err := New(config, TestLogger(t))
+	require.NoError(t, err)
+
+	// Create a test user with TOTP and passkey
+	testUser := NewTestUser("test@example.com")
+	testUser.TOTPEnabled = true
+	testUser.TOTPSecret = "JBSWY3DPEHPK3PXP"
+	user := testUser.ToUser()
+	user.Passkeys = []Passkey{*NewTestPasskey(user.ID, "Test Passkey").ToPasskey()}
+	ctx := TestContext(t)
+	err = connector.storage.CreateUser(ctx, user)
+	require.NoError(t, err)
+
+	// Create a 2FA session
+	session, err := connector.Begin2FA(ctx, user.ID, "password", "http://callback", "test-state")
+	require.NoError(t, err)
+
+	tests := []struct {
+		name           string
+		sessionID      string
+		expectedStatus int
+		checkResponse  func(t *testing.T, body string)
+	}{
+		{
+			name:           "valid session shows prompt",
+			sessionID:      session.SessionID,
+			expectedStatus: http.StatusOK,
+			checkResponse: func(t *testing.T, body string) {
+				assert.Contains(t, body, "Two-Factor Authentication")
+			},
+		},
+		{
+			name:           "missing session ID",
+			sessionID:      "",
+			expectedStatus: http.StatusBadRequest,
+			checkResponse: func(t *testing.T, body string) {
+				assert.Contains(t, body, "missing session_id")
+			},
+		},
+		{
+			name:           "invalid session ID",
+			sessionID:      "invalid-session",
+			expectedStatus: http.StatusUnauthorized,
+			checkResponse: func(t *testing.T, body string) {
+				assert.Contains(t, body, "invalid or expired")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create request
+			url := "http://example.com/2fa/prompt?session_id=" + tt.sessionID
+			req := httptest.NewRequest("GET", url, nil)
+			w := httptest.NewRecorder()
+
+			// Call handler
+			connector.handle2FAPrompt(w, req)
+
+			// Check status
+			assert.Equal(t, tt.expectedStatus, w.Code)
+
+			// Check response
+			if tt.checkResponse != nil {
+				tt.checkResponse(t, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestHandle2FAVerifyTOTP(t *testing.T) {
+	// Setup
+	config := DefaultTestConfig(t)
+	config.TwoFactor.Required = true
+	defer CleanupTestStorage(t, config.DataDir)
+
+	connector, err := New(config, TestLogger(t))
+	require.NoError(t, err)
+
+	// Create a test user with TOTP
+	testUser := NewTestUser("test@example.com")
+	secret := "JBSWY3DPEHPK3PXP"
+	testUser.TOTPEnabled = true
+	testUser.TOTPSecret = secret
+	user := testUser.ToUser()
+	ctx := TestContext(t)
+	err = connector.storage.CreateUser(ctx, user)
+	require.NoError(t, err)
+
+	// Create a 2FA session
+	session, err := connector.Begin2FA(ctx, user.ID, "password", "http://callback", "test-state")
+	require.NoError(t, err)
+
+	// Generate valid TOTP code
+	validCode, err := totp.GenerateCode(secret, time.Now())
+	require.NoError(t, err)
+
+	tests := []struct {
+		name           string
+		sessionID      string
+		code           string
+		expectedStatus int
+		checkRedirect  bool
+	}{
+		{
+			name:           "valid TOTP code",
+			sessionID:      session.SessionID,
+			code:           validCode,
+			expectedStatus: http.StatusFound, // 302 redirect
+			checkRedirect:  true,
+		},
+		{
+			name:           "invalid TOTP code",
+			sessionID:      session.SessionID,
+			code:           "000000",
+			expectedStatus: http.StatusUnauthorized,
+			checkRedirect:  false,
+		},
+		{
+			name:           "missing session ID",
+			sessionID:      "",
+			code:           validCode,
+			expectedStatus: http.StatusBadRequest,
+			checkRedirect:  false,
+		},
+		{
+			name:           "invalid session ID",
+			sessionID:      "invalid-session",
+			code:           validCode,
+			expectedStatus: http.StatusUnauthorized,
+			checkRedirect:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create form data
+			form := url.Values{}
+			form.Add("session_id", tt.sessionID)
+			form.Add("code", tt.code)
+			form.Add("callback", "http://callback")
+			form.Add("state", "test-state")
+
+			// Create request
+			req := httptest.NewRequest("POST", "http://example.com/2fa/verify/totp", strings.NewReader(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			w := httptest.NewRecorder()
+
+			// Call handler
+			connector.handle2FAVerifyTOTP(w, req)
+
+			// Check status
+			assert.Equal(t, tt.expectedStatus, w.Code)
+
+			// Check redirect if expected
+			if tt.checkRedirect {
+				location := w.Header().Get("Location")
+				assert.NotEmpty(t, location)
+				assert.Contains(t, location, "callback")
+				assert.Contains(t, location, "user_id="+user.ID)
+			}
+		})
+	}
+}
+
+func TestHandle2FAVerifyBackupCode(t *testing.T) {
+	// Setup
+	config := DefaultTestConfig(t)
+	config.TwoFactor.Required = true
+	defer CleanupTestStorage(t, config.DataDir)
+
+	connector, err := New(config, TestLogger(t))
+	require.NoError(t, err)
+
+	// Create a test user with backup codes
+	testUser := NewTestUser("test@example.com")
+	user := testUser.ToUser()
+	backupCodes := []string{"ABCD1234", "EFGH5678"}
+	ctx := TestContext(t)
+
+	// Hash backup codes and add to user
+	for _, code := range backupCodes {
+		hash, err := hashPassword(code)
+		require.NoError(t, err)
+		user.BackupCodes = append(user.BackupCodes, BackupCode{
+			Code: hash,
+			Used: false,
+		})
+	}
+	err = connector.storage.CreateUser(ctx, user)
+	require.NoError(t, err)
+
+	// Create a 2FA session
+	session, err := connector.Begin2FA(ctx, user.ID, "password", "http://callback", "test-state")
+	require.NoError(t, err)
+
+	tests := []struct {
+		name           string
+		sessionID      string
+		code           string
+		expectedStatus int
+		checkRedirect  bool
+	}{
+		{
+			name:           "valid backup code",
+			sessionID:      session.SessionID,
+			code:           "ABCD1234",
+			expectedStatus: http.StatusFound, // 302 redirect
+			checkRedirect:  true,
+		},
+		{
+			name:           "invalid backup code",
+			sessionID:      session.SessionID,
+			code:           "INVALID1",
+			expectedStatus: http.StatusUnauthorized,
+			checkRedirect:  false,
+		},
+		{
+			name:           "missing session ID",
+			sessionID:      "",
+			code:           "EFGH5678",
+			expectedStatus: http.StatusBadRequest,
+			checkRedirect:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create form data
+			form := url.Values{}
+			form.Add("session_id", tt.sessionID)
+			form.Add("code", tt.code)
+			form.Add("callback", "http://callback")
+			form.Add("state", "test-state")
+
+			// Create request
+			req := httptest.NewRequest("POST", "http://example.com/2fa/verify/backup-code", strings.NewReader(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			w := httptest.NewRecorder()
+
+			// Call handler
+			connector.handle2FAVerifyBackupCode(w, req)
+
+			// Check status
+			assert.Equal(t, tt.expectedStatus, w.Code)
+
+			// Check redirect if expected
+			if tt.checkRedirect {
+				location := w.Header().Get("Location")
+				assert.NotEmpty(t, location)
+				assert.Contains(t, location, "callback")
+				assert.Contains(t, location, "user_id="+user.ID)
+
+				// Verify backup code was marked as used
+				updatedUser, err := connector.storage.GetUser(ctx, user.ID)
+				require.NoError(t, err)
+				for _, bc := range updatedUser.BackupCodes {
+					if verifyPassword(tt.code, bc.Code) {
+						assert.True(t, bc.Used, "backup code should be marked as used")
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestHandle2FAVerifyPasskeyBegin(t *testing.T) {
+	// Setup
+	config := DefaultTestConfig(t)
+	config.TwoFactor.Required = true
+	config.Passkey.Enabled = true
+	defer CleanupTestStorage(t, config.DataDir)
+
+	connector, err := New(config, TestLogger(t))
+	require.NoError(t, err)
+
+	// Create a test user with a passkey
+	testUser := NewTestUser("test@example.com")
+	user := testUser.ToUser()
+	user.Passkeys = []Passkey{*NewTestPasskey(user.ID, "Test Passkey").ToPasskey()}
+	ctx := TestContext(t)
+	err = connector.storage.CreateUser(ctx, user)
+	require.NoError(t, err)
+
+	// Create a 2FA session
+	session, err := connector.Begin2FA(ctx, user.ID, "password", "http://callback", "test-state")
+	require.NoError(t, err)
+
+	tests := []struct {
+		name           string
+		sessionID      string
+		expectedStatus int
+		checkResponse  func(t *testing.T, body map[string]interface{})
+	}{
+		{
+			name:           "valid session creates WebAuthn challenge",
+			sessionID:      session.SessionID,
+			expectedStatus: http.StatusOK,
+			checkResponse: func(t *testing.T, body map[string]interface{}) {
+				assert.NotEmpty(t, body["webauthn_session_id"])
+				assert.NotNil(t, body["options"])
+			},
+		},
+		{
+			name:           "missing session ID",
+			sessionID:      "",
+			expectedStatus: http.StatusBadRequest,
+			checkResponse:  nil,
+		},
+		{
+			name:           "invalid session ID",
+			sessionID:      "invalid-session",
+			expectedStatus: http.StatusUnauthorized,
+			checkResponse:  nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create request body
+			reqBody := map[string]string{
+				"session_id": tt.sessionID,
+			}
+			jsonBody, err := json.Marshal(reqBody)
+			require.NoError(t, err)
+
+			// Create request
+			req := httptest.NewRequest("POST", "http://example.com/2fa/verify/passkey/begin", bytes.NewReader(jsonBody))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+
+			// Call handler
+			connector.handle2FAVerifyPasskeyBegin(w, req)
+
+			// Check status
+			assert.Equal(t, tt.expectedStatus, w.Code)
+
+			// Check response if expected
+			if tt.checkResponse != nil {
+				var response map[string]interface{}
+				err := json.Unmarshal(w.Body.Bytes(), &response)
+				require.NoError(t, err)
+				tt.checkResponse(t, response)
+			}
+		})
+	}
+}
+
+func TestHandle2FAVerifyPasskeyFinish(t *testing.T) {
+	// Setup
+	config := DefaultTestConfig(t)
+	config.TwoFactor.Required = true
+	config.Passkey.Enabled = true
+	defer CleanupTestStorage(t, config.DataDir)
+
+	connector, err := New(config, TestLogger(t))
+	require.NoError(t, err)
+
+	// Create a test user with a passkey
+	testUser := NewTestUser("test@example.com")
+	user := testUser.ToUser()
+	user.Passkeys = []Passkey{*NewTestPasskey(user.ID, "Test Passkey").ToPasskey()}
+	ctx := TestContext(t)
+	err = connector.storage.CreateUser(ctx, user)
+	require.NoError(t, err)
+
+	// Create a 2FA session
+	session, err := connector.Begin2FA(ctx, user.ID, "password", "http://callback", "test-state")
+	require.NoError(t, err)
+
+	tests := []struct {
+		name           string
+		sessionID      string
+		webauthnSessID string
+		expectedStatus int
+	}{
+		{
+			name:           "missing session ID",
+			sessionID:      "",
+			webauthnSessID: "test-webauthn-session",
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "invalid session ID",
+			sessionID:      "invalid-session",
+			webauthnSessID: "test-webauthn-session",
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			name:           "missing WebAuthn session ID",
+			sessionID:      session.SessionID,
+			webauthnSessID: "",
+			expectedStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create request body
+			reqBody := map[string]interface{}{
+				"session_id":          tt.sessionID,
+				"webauthn_session_id": tt.webauthnSessID,
+				"credential":          map[string]interface{}{},
+			}
+			jsonBody, err := json.Marshal(reqBody)
+			require.NoError(t, err)
+
+			// Create request
+			req := httptest.NewRequest("POST", "http://example.com/2fa/verify/passkey/finish", bytes.NewReader(jsonBody))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+
+			// Call handler
+			connector.handle2FAVerifyPasskeyFinish(w, req)
+
+			// Check status
+			assert.Equal(t, tt.expectedStatus, w.Code)
 		})
 	}
 }

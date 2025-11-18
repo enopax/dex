@@ -477,3 +477,8 @@ func (tm *TestMagicLinkToken) ToMagicLinkToken() *MagicLinkToken {
 		IPAddress: tm.IPAddress,
 	}
 }
+
+// stringPtr returns a pointer to a string value
+func stringPtr(s string) *string {
+	return &s
+}
