@@ -2406,6 +2406,352 @@ GET /setup-auth?token=abc123...xyz
 
 ---
 
+## Platform Integration Documentation (Phase 6 Week 12 - COMPLETE)
+
+**Purpose**: Comprehensive integration guide for Platform developers to integrate with the Enhanced Local Connector.
+
+**Status**: ✅ COMPLETE (2025-11-18) - Complete Platform integration guide with TypeScript examples
+
+### Overview
+
+The Platform Integration Guide provides everything Platform developers need to integrate with the Enhanced Local Connector, including:
+
+- gRPC client setup and configuration
+- Complete user registration flow implementation
+- Authentication setup flow integration
+- OAuth integration with NextAuth.js
+- User management operations
+- Error handling patterns
+- Security best practices
+- Testing strategies
+- Production deployment guidelines
+
+**Location**: `docs/enhancements/platform-integration.md` (comprehensive 1650+ line guide)
+
+### Key Features Documented
+
+#### 1. gRPC Client Setup
+
+Complete TypeScript implementation for Next.js Platform:
+
+```typescript
+// lib/dex/dex-api.ts
+import * as grpc from '@grpc/grpc-js';
+import * as protoLoader from '@grpc/proto-loader';
+import { promisify } from 'util';
+
+// Promisified gRPC client for easy async/await usage
+const client = createPromisifiedClient();
+
+export const dexAPI = {
+  createUser: promisify(client.createUser).bind(client),
+  getUser: promisify(client.getUser).bind(client),
+  setPassword: promisify(client.setPassword).bind(client),
+  enableTOTP: promisify(client.enableTOTP).bind(client),
+  // ... all 17 gRPC endpoints
+};
+```
+
+**Features**:
+- Promisified client for modern async/await
+- TypeScript type definitions for all requests/responses
+- Connection pooling and retry logic
+- Environment-based configuration
+- TLS support for production
+
+#### 2. Complete User Registration Flow
+
+Full implementation of Platform registration API:
+
+```typescript
+// app/api/auth/register/route.ts
+export async function POST(request: NextRequest) {
+  // 1. Validate input with Zod
+  const validatedData = registerSchema.parse(body);
+
+  // 2. Create user in Dex via gRPC
+  const createUserResponse = await dexAPI.createUser({
+    email: validatedData.email,
+    username: validatedData.username,
+    displayName: validatedData.displayName,
+  });
+
+  // 3. Generate auth setup token
+  const setupToken = generateAuthSetupToken(user.id);
+
+  // 4. Send setup email
+  await sendAuthSetupEmail(user.email, setupToken);
+
+  // 5. Return success
+  return NextResponse.json({ success: true, userId: user.id });
+}
+```
+
+**Covered Topics**:
+- Input validation with Zod
+- gRPC API calls
+- Auth setup token generation
+- Email sending integration
+- Error handling
+- Transaction management
+
+#### 3. Auth Setup Integration
+
+Complete implementation of auth setup flow:
+
+**Platform Responsibilities**:
+1. Create user via gRPC (`CreateUser`)
+2. Generate auth setup token (cryptographically secure)
+3. Store token in Platform database
+4. Send email with setup link: `https://auth.enopax.io/setup-auth?token=...`
+5. Handle user return after setup
+
+**Dex Responsibilities**:
+1. Validate token on `/setup-auth` page
+2. Display auth method options (passkey, password, both)
+3. Set up chosen auth method(s)
+4. Redirect to Platform's `ReturnURL`
+
+**Code Examples**:
+- Auth setup token generation
+- Email template with setup link
+- Token validation flow
+- Return URL handling
+
+#### 4. OAuth Integration with NextAuth.js
+
+Complete NextAuth.js configuration for Dex:
+
+```typescript
+// app/api/auth/[...nextauth]/route.ts
+export const authOptions: NextAuthOptions = {
+  providers: [
+    {
+      id: 'dex',
+      name: 'Enopax Auth',
+      type: 'oauth',
+      authorization: {
+        url: `${process.env.DEX_URL}/auth`,
+        params: { scope: 'openid email profile offline_access' }
+      },
+      token: `${process.env.DEX_URL}/token`,
+      userinfo: `${process.env.DEX_URL}/userinfo`,
+      clientId: process.env.DEX_CLIENT_ID,
+      clientSecret: process.env.DEX_CLIENT_SECRET,
+    }
+  ],
+  // ... callbacks and session config
+};
+```
+
+**Features**:
+- OAuth 2.0 authorization code flow
+- OpenID Connect integration
+- Session management
+- Token refresh
+- User profile mapping
+
+#### 5. User Management Operations
+
+TypeScript examples for all common operations:
+
+- **Get User**: Retrieve user by ID or email
+- **Update User**: Update display name, email verification
+- **Change Password**: Update user password
+- **List Passkeys**: Get all passkeys for user
+- **Enable TOTP**: Set up two-factor authentication
+- **Manage Backup Codes**: Regenerate backup codes
+
+Each operation includes:
+- TypeScript type definitions
+- Request/response examples
+- Error handling
+- Validation logic
+
+#### 6. Error Handling Patterns
+
+Comprehensive error handling guide:
+
+```typescript
+// lib/dex/error-handler.ts
+export function handleGRPCError(error: any): DexAPIError {
+  // Map gRPC errors to user-friendly messages
+  if (error.code === grpc.status.NOT_FOUND) {
+    return { code: 'USER_NOT_FOUND', message: 'User not found' };
+  }
+  // ... handle all error types
+}
+```
+
+**Error Types Covered**:
+- gRPC connection errors
+- User not found
+- Already exists
+- Invalid input
+- Authentication failures
+- Rate limiting
+- TOTP verification failures
+
+#### 7. Security Considerations
+
+Production-ready security guidance:
+
+- **TLS Configuration**: mTLS for gRPC, HTTPS for all endpoints
+- **API Authentication**: API key implementation (future)
+- **Input Validation**: Zod schemas for all inputs
+- **Rate Limiting**: Request rate limiting on API routes
+- **Session Management**: Secure session handling
+- **Secret Management**: Environment variables, not hardcoded
+- **CSRF Protection**: Built-in with NextAuth.js
+
+#### 8. Testing Strategies
+
+Complete testing examples:
+
+**Unit Tests**:
+```typescript
+describe('dexAPI.createUser', () => {
+  it('should create user successfully', async () => {
+    const response = await dexAPI.createUser({
+      email: 'test@example.com',
+      username: 'testuser',
+      displayName: 'Test User',
+    });
+    expect(response.user).toBeDefined();
+    expect(response.user.email).toBe('test@example.com');
+  });
+});
+```
+
+**Integration Tests**:
+- Complete registration flow test
+- OAuth login flow test
+- Auth setup flow test
+- Error handling test
+
+#### 9. Production Deployment
+
+**Environment Variables**:
+```bash
+# .env.production
+DEX_GRPC_URL=grpcs://dex.enopax.io:5557
+DEX_URL=https://dex.enopax.io
+DEX_CLIENT_ID=platform-production
+DEX_CLIENT_SECRET=<secret>
+NEXTAUTH_URL=https://platform.enopax.io
+NEXTAUTH_SECRET=<secret>
+```
+
+**Health Checks**:
+```typescript
+// app/api/health/dex/route.ts
+export async function GET() {
+  try {
+    await dexAPI.healthCheck();
+    return NextResponse.json({ status: 'healthy' });
+  } catch (error) {
+    return NextResponse.json({ status: 'unhealthy' }, { status: 503 });
+  }
+}
+```
+
+**Deployment Checklist**:
+- TLS certificates configured
+- Environment variables set
+- gRPC connection tested
+- OAuth redirect URIs configured
+- Rate limiting enabled
+- Logging configured
+- Error monitoring enabled
+
+#### 10. Troubleshooting Guide
+
+Common issues and solutions:
+
+1. **gRPC Connection Refused**
+   - Check Dex server is running
+   - Verify GRPC_URL is correct
+   - Check firewall rules
+   - Verify TLS certificates
+
+2. **OAuth Callback Error**
+   - Verify redirect_uri matches configuration
+   - Check client_id and client_secret
+   - Verify OAuth state parameter
+
+3. **User Already Exists**
+   - Handle idempotent user creation
+   - Return existing user if email matches
+
+4. **Auth Setup Token Expired**
+   - Generate new token
+   - Increase TTL if needed (default 24 hours)
+
+5. **TOTP Verification Fails**
+   - Check time synchronization
+   - Verify TOTP secret
+   - Check for rate limiting
+
+### Documentation Structure
+
+**File**: `docs/enhancements/platform-integration.md`
+
+**Sections**:
+1. Overview - Architecture and communication protocols
+2. Prerequisites - Required software and packages
+3. Quick Start - 5-step setup guide
+4. gRPC Client Setup - Complete TypeScript implementation
+5. User Registration Flow - Full registration API
+6. Authentication Setup Flow - Auth method setup
+7. OAuth Integration - NextAuth.js configuration
+8. User Management - All CRUD operations
+9. Error Handling - Comprehensive error patterns
+10. Security Considerations - Production security
+11. Testing - Unit and integration tests
+12. Production Deployment - Environment setup
+13. Troubleshooting - Common issues and solutions
+14. Resources - Links and support channels
+
+**Total Length**: 1652 lines of comprehensive documentation
+
+### TypeScript Examples Included
+
+The guide includes complete, production-ready TypeScript code:
+
+- ✅ Promisified gRPC client (80+ lines)
+- ✅ User registration API route (120+ lines)
+- ✅ Auth setup token management (100+ lines)
+- ✅ Auth setup page component (150+ lines)
+- ✅ NextAuth.js configuration (100+ lines)
+- ✅ Login page with Dex integration (80+ lines)
+- ✅ User management functions (150+ lines)
+- ✅ Error handling utilities (60+ lines)
+- ✅ Unit test examples (100+ lines)
+- ✅ Integration test examples (80+ lines)
+
+**Total Code Examples**: 1000+ lines of TypeScript
+
+### Files Created
+
+1. **docs/enhancements/platform-integration.md** (1652 lines)
+   - Complete integration guide
+   - All TypeScript examples
+   - Error handling patterns
+   - Security best practices
+   - Testing strategies
+   - Production deployment guide
+
+### Next Steps
+
+- [ ] Implement actual Platform integration (in Platform repository)
+- [ ] Test end-to-end registration flow
+- [ ] Add webhook for user creation notification (optional)
+- [ ] Create Platform admin UI for user management
+
+**Deliverable**: ✅ Complete Platform integration guide with 1000+ lines of production-ready TypeScript code
+
+---
+
 ## Security Audit (Phase 7 Week 14 - COMPLETE)
 
 **Purpose**: Comprehensive security review of the enhanced local connector implementation.
