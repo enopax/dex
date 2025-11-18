@@ -302,3 +302,249 @@ service Dex {
   // VerifyPassword returns whether a password matches a hash for a specific email or not.
   rpc VerifyPassword(VerifyPasswordReq) returns (VerifyPasswordResp) {};
 }
+
+// Enhanced Local Connector User Management
+// These messages and service are for managing users in the enhanced local connector
+
+// User represents an enhanced user account with support for multiple authentication methods.
+message EnhancedUser {
+  string id = 1;
+  string email = 2;
+  string username = 3;
+  string display_name = 4;
+  bool email_verified = 5;
+  bool require_2fa = 6;
+  int64 created_at = 7;
+  int64 updated_at = 8;
+  int64 last_login_at = 9;
+}
+
+// Passkey represents a WebAuthn credential.
+message Passkey {
+  string id = 1;
+  string user_id = 2;
+  string name = 3;
+  int64 created_at = 4;
+  int64 last_used_at = 5;
+  repeated string transports = 6;
+  bool backup_eligible = 7;
+  bool backup_state = 8;
+}
+
+// TOTPInfo represents TOTP 2FA information.
+message TOTPInfo {
+  bool enabled = 1;
+  int32 backup_codes_remaining = 2;
+}
+
+// CreateUserReq is a request to create a new user.
+message CreateUserReq {
+  string email = 1;
+  string username = 2;
+  string display_name = 3;
+}
+
+// CreateUserResp returns the created user.
+message CreateUserResp {
+  EnhancedUser user = 1;
+  bool already_exists = 2;
+}
+
+// GetUserReq is a request to retrieve user details.
+message GetUserReq {
+  // Either user_id or email must be provided
+  string user_id = 1;
+  string email = 2;
+}
+
+// GetUserResp returns the user details.
+message GetUserResp {
+  EnhancedUser user = 1;
+  bool not_found = 2;
+}
+
+// UpdateUserReq is a request to update an existing user.
+message UpdateUserReq {
+  string user_id = 1;
+  string username = 2;
+  string display_name = 3;
+  bool email_verified = 4;
+  bool require_2fa = 5;
+}
+
+// UpdateUserResp returns the response from updating a user.
+message UpdateUserResp {
+  bool not_found = 1;
+}
+
+// DeleteUserReq is a request to delete a user.
+message DeleteUserReq {
+  string user_id = 1;
+}
+
+// DeleteUserResp determines if the user is deleted successfully.
+message DeleteUserResp {
+  bool not_found = 1;
+}
+
+// SetPasswordReq is a request to set or update a user's password.
+message SetPasswordReq {
+  string user_id = 1;
+  string password = 2;
+}
+
+// SetPasswordResp returns the response from setting a password.
+message SetPasswordResp {
+  bool not_found = 1;
+}
+
+// RemovePasswordReq is a request to remove a user's password (for passwordless accounts).
+message RemovePasswordReq {
+  string user_id = 1;
+}
+
+// RemovePasswordResp returns the response from removing a password.
+message RemovePasswordResp {
+  bool not_found = 1;
+}
+
+// EnableTOTPReq is a request to enable TOTP 2FA for a user.
+message EnableTOTPReq {
+  string user_id = 1;
+}
+
+// EnableTOTPResp returns TOTP setup information.
+message EnableTOTPResp {
+  bool not_found = 1;
+  bool already_enabled = 2;
+  string secret = 3;
+  string qr_code = 4; // base64-encoded PNG
+  string otpauth_url = 5;
+  repeated string backup_codes = 6;
+}
+
+// VerifyTOTPSetupReq is a request to verify and complete TOTP setup.
+message VerifyTOTPSetupReq {
+  string user_id = 1;
+  string secret = 2;
+  string code = 3;
+  repeated string backup_codes = 4;
+}
+
+// VerifyTOTPSetupResp returns the response from verifying TOTP setup.
+message VerifyTOTPSetupResp {
+  bool not_found = 1;
+  bool invalid_code = 2;
+}
+
+// DisableTOTPReq is a request to disable TOTP 2FA.
+message DisableTOTPReq {
+  string user_id = 1;
+  string code = 2; // TOTP code or backup code for verification
+}
+
+// DisableTOTPResp returns the response from disabling TOTP.
+message DisableTOTPResp {
+  bool not_found = 1;
+  bool invalid_code = 2;
+}
+
+// GetTOTPInfoReq is a request to get TOTP information.
+message GetTOTPInfoReq {
+  string user_id = 1;
+}
+
+// GetTOTPInfoResp returns TOTP information.
+message GetTOTPInfoResp {
+  bool not_found = 1;
+  TOTPInfo totp_info = 2;
+}
+
+// RegenerateBackupCodesReq is a request to regenerate backup codes.
+message RegenerateBackupCodesReq {
+  string user_id = 1;
+  string code = 2; // TOTP code for verification
+}
+
+// RegenerateBackupCodesResp returns new backup codes.
+message RegenerateBackupCodesResp {
+  bool not_found = 1;
+  bool invalid_code = 2;
+  repeated string backup_codes = 3;
+}
+
+// ListPasskeysReq is a request to list all passkeys for a user.
+message ListPasskeysReq {
+  string user_id = 1;
+}
+
+// ListPasskeysResp returns a list of passkeys.
+message ListPasskeysResp {
+  bool not_found = 1;
+  repeated Passkey passkeys = 2;
+}
+
+// RenamePasskeyReq is a request to rename a passkey.
+message RenamePasskeyReq {
+  string user_id = 1;
+  string passkey_id = 2;
+  string new_name = 3;
+}
+
+// RenamePasskeyResp returns the response from renaming a passkey.
+message RenamePasskeyResp {
+  bool not_found = 1;
+}
+
+// DeletePasskeyReq is a request to delete a passkey.
+message DeletePasskeyReq {
+  string user_id = 1;
+  string passkey_id = 2;
+}
+
+// DeletePasskeyResp determines if the passkey is deleted successfully.
+message DeletePasskeyResp {
+  bool not_found = 1;
+}
+
+// GetAuthMethodsReq is a request to get a user's configured authentication methods.
+message GetAuthMethodsReq {
+  string user_id = 1;
+}
+
+// GetAuthMethodsResp returns the user's authentication methods.
+message GetAuthMethodsResp {
+  bool not_found = 1;
+  bool has_password = 2;
+  int32 passkey_count = 3;
+  bool totp_enabled = 4;
+  bool magic_link_enabled = 5;
+}
+
+// EnhancedLocalConnector is a gRPC service for managing users in the enhanced local connector.
+service EnhancedLocalConnector {
+  // User Management
+  rpc CreateUser(CreateUserReq) returns (CreateUserResp) {};
+  rpc GetUser(GetUserReq) returns (GetUserResp) {};
+  rpc UpdateUser(UpdateUserReq) returns (UpdateUserResp) {};
+  rpc DeleteUser(DeleteUserReq) returns (DeleteUserResp) {};
+
+  // Password Management
+  rpc SetPassword(SetPasswordReq) returns (SetPasswordResp) {};
+  rpc RemovePassword(RemovePasswordReq) returns (RemovePasswordResp) {};
+
+  // TOTP Management
+  rpc EnableTOTP(EnableTOTPReq) returns (EnableTOTPResp) {};
+  rpc VerifyTOTPSetup(VerifyTOTPSetupReq) returns (VerifyTOTPSetupResp) {};
+  rpc DisableTOTP(DisableTOTPReq) returns (DisableTOTPResp) {};
+  rpc GetTOTPInfo(GetTOTPInfoReq) returns (GetTOTPInfoResp) {};
+  rpc RegenerateBackupCodes(RegenerateBackupCodesReq) returns (RegenerateBackupCodesResp) {};
+
+  // Passkey Management
+  rpc ListPasskeys(ListPasskeysReq) returns (ListPasskeysResp) {};
+  rpc RenamePasskey(RenamePasskeyReq) returns (RenamePasskeyResp) {};
+  rpc DeletePasskey(DeletePasskeyReq) returns (DeletePasskeyResp) {};
+
+  // Authentication Method Info
+  rpc GetAuthMethods(GetAuthMethodsReq) returns (GetAuthMethodsResp) {};
+}
