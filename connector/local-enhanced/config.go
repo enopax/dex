@@ -30,6 +30,9 @@ type Config struct {
 
 	// Email configuration
 	Email EmailConfig `json:"email"`
+
+	// GRPC configuration
+	GRPC GRPCConfig `json:"grpc"`
 }
 
 // PasskeyConfig holds WebAuthn/passkey configuration.
@@ -140,6 +143,20 @@ type SMTPConfig struct {
 	TLS bool `json:"tls"`
 }
 
+// GRPCConfig holds gRPC API configuration.
+type GRPCConfig struct {
+	// Enabled indicates whether gRPC API authentication is enabled
+	Enabled bool `json:"enabled"`
+
+	// APIKeys is a list of valid API keys for gRPC authentication
+	// Each key should be a long random string (32+ characters)
+	APIKeys []string `json:"apiKeys"`
+
+	// RequireAuthentication indicates whether authentication is required for all gRPC calls
+	// If false, API will be accessible without authentication (INSECURE - only for development)
+	RequireAuthentication bool `json:"requireAuthentication"`
+}
+
 // Validate validates the configuration.
 func (c *Config) Validate() error {
 	if c.BaseURL == "" {
@@ -185,6 +202,19 @@ func (c *Config) Validate() error {
 		}
 		if c.Email.From == "" {
 			return errors.New("email.from is required when magic link is enabled")
+		}
+	}
+
+	// Validate gRPC config
+	if c.GRPC.Enabled && c.GRPC.RequireAuthentication {
+		if len(c.GRPC.APIKeys) == 0 {
+			return errors.New("grpc.apiKeys must contain at least one API key when authentication is required")
+		}
+		// Validate API key length (should be 32+ characters)
+		for i, key := range c.GRPC.APIKeys {
+			if len(key) < 32 {
+				return fmt.Errorf("grpc.apiKeys[%d] must be at least 32 characters (got %d)", i, len(key))
+			}
 		}
 	}
 
@@ -234,6 +264,11 @@ func DefaultConfig() *Config {
 			},
 			From:     "noreply@enopax.io",
 			FromName: "Enopax Authentication",
+		},
+		GRPC: GRPCConfig{
+			Enabled:               false, // Disabled by default for development
+			APIKeys:               []string{},
+			RequireAuthentication: false, // No auth for development
 		},
 	}
 }

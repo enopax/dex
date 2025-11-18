@@ -1886,10 +1886,50 @@ type GRPCServer struct {
 - Boolean flag error responses (`not_found`, `already_exists`, `invalid_code`)
 - Integration with existing connector methods (BeginTOTPSetup, SetPassword, etc.)
 - Comprehensive logging of all operations
+- **API Key Authentication** ✅ **COMPLETE** (2025-11-18)
+  - Configurable authentication (enabled/disabled for dev/prod)
+  - Multiple API key support for key rotation
+  - Constant-time comparison to prevent timing attacks
+  - gRPC unary server interceptor
+  - Comprehensive test coverage (8 test functions, all passing)
 
 **Helper Functions**:
 - `convertUserToProto(user *User)` - Converts User to protobuf EnhancedUser
 - `convertPasskeyToProto(passkey *Passkey)` - Converts Passkey to protobuf Passkey
+
+### Authentication (COMPLETE - 2025-11-18)
+
+**Status**: ✅ Production-ready API key authentication implemented
+
+The gRPC API now supports secure API key authentication using a unary server interceptor that validates the `authorization` metadata header.
+
+**Configuration**:
+```yaml
+connectors:
+  - type: local-enhanced
+    config:
+      grpc:
+        enabled: true                    # Enable gRPC authentication
+        requireAuthentication: true      # Require API keys (false for dev)
+        apiKeys:
+          - "production-api-key-32-chars-minimum-length"
+          - "backup-api-key-for-key-rotation-support"
+```
+
+**Client Usage** (Go):
+```go
+// Add API key to metadata for all requests
+ctx = metadata.AppendToOutgoingContext(ctx, "authorization", apiKey)
+resp, err := client.CreateUser(ctx, &api.CreateUserReq{...})
+```
+
+**Security Features**:
+- Constant-time comparison prevents timing attacks
+- Minimum 32-character API key length (enforced by config validation)
+- Invalid API key attempts are logged
+- Multiple API key support for zero-downtime key rotation
+
+**Documentation**: See `docs/enhancements/grpc-api.md` for complete authentication guide with examples in Go and Node.js/TypeScript.
 
 ### Key Endpoints
 

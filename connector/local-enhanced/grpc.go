@@ -2,10 +2,15 @@ package local
 
 import (
 	"context"
+	"crypto/subtle"
 	"fmt"
 	"time"
 
 	"github.com/dexidp/dex/api/v2"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 // GRPCServer implements the EnhancedLocalConnector gRPC service.
@@ -19,6 +24,56 @@ func NewGRPCServer(connector *Connector) *GRPCServer {
 	return &GRPCServer{
 		connector: connector,
 	}
+}
+
+// UnaryServerInterceptor returns a gRPC unary server interceptor for authentication.
+// This interceptor validates API keys from the request metadata.
+func (s *GRPCServer) UnaryServerInterceptor() grpc.UnaryServerInterceptor {
+	return func(
+		ctx context.Context,
+		req interface{},
+		info *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler,
+	) (interface{}, error) {
+		// Skip authentication if not enabled
+		if !s.connector.config.GRPC.Enabled || !s.connector.config.GRPC.RequireAuthentication {
+			return handler(ctx, req)
+		}
+
+		// Extract metadata from context
+		md, ok := metadata.FromIncomingContext(ctx)
+		if !ok {
+			return nil, status.Error(codes.Unauthenticated, "missing metadata")
+		}
+
+		// Get API key from metadata
+		apiKeys := md.Get("authorization")
+		if len(apiKeys) == 0 {
+			return nil, status.Error(codes.Unauthenticated, "missing authorization header")
+		}
+
+		// Validate API key
+		providedKey := apiKeys[0]
+		if !s.validateAPIKey(providedKey) {
+			s.connector.logger.Warnf("gRPC: Invalid API key attempted from %v", info.FullMethod)
+			return nil, status.Error(codes.Unauthenticated, "invalid API key")
+		}
+
+		// API key valid, proceed with request
+		return handler(ctx, req)
+	}
+}
+
+// validateAPIKey validates an API key using constant-time comparison.
+func (s *GRPCServer) validateAPIKey(providedKey string) bool {
+	// Check against all configured API keys
+	for _, validKey := range s.connector.config.GRPC.APIKeys {
+		// Use constant-time comparison to prevent timing attacks
+		if subtle.ConstantTimeCompare([]byte(providedKey), []byte(validKey)) == 1 {
+			return true
+		}
+	}
+	return false
 }
 
 // CreateUser creates a new user account.

@@ -72,15 +72,166 @@ service EnhancedLocalConnector {
 
 ## Authentication
 
-### API Authentication (TODO)
+### API Key Authentication
 
-Currently, the gRPC API does not implement authentication. This will be added in a future version using one of:
+**Status**: ✅ **IMPLEMENTED** (2025-11-18)
 
-- **API Keys**: Static tokens configured in Dex
-- **mTLS**: Mutual TLS certificate authentication
-- **JWT**: Platform-issued JWT tokens
+The gRPC API now supports API key authentication for secure access control. API keys are validated using a gRPC unary server interceptor that checks the `authorization` metadata header.
 
-**Security Note**: Until authentication is implemented, the gRPC API should only be exposed on a trusted internal network.
+#### Configuration
+
+API key authentication is configured in the connector configuration:
+
+```yaml
+connectors:
+  - type: local-enhanced
+    id: local
+    name: Enopax Authentication
+    config:
+      # ... other config fields ...
+      grpc:
+        enabled: true                    # Enable gRPC authentication
+        requireAuthentication: true      # Require API keys for all calls
+        apiKeys:
+          - "production-api-key-12345678901234567890abcdef"
+          - "backup-api-key-09876543210987654321fedcba"
+```
+
+**Configuration Options**:
+- `enabled` - Enable/disable gRPC authentication (default: `false`)
+- `requireAuthentication` - Require API keys for all gRPC calls (default: `false`)
+  - If `false`, API is accessible without authentication (⚠️ INSECURE - development only)
+- `apiKeys` - List of valid API keys (minimum 32 characters each)
+
+#### API Key Requirements
+
+- **Length**: Minimum 32 characters (enforced by configuration validation)
+- **Format**: Any string (alphanumeric + special characters recommended)
+- **Generation**: Use cryptographically secure random generation
+- **Storage**: Store in environment variables, not hardcoded in config
+
+**Example API Key Generation** (using OpenSSL):
+```bash
+openssl rand -base64 32
+# Output: e.g., "xJ3K9mN8vL2pQ5rT7wY4zB6hD1fG8jA0"
+```
+
+#### Client-Side Usage
+
+##### Go Example
+
+```go
+import (
+    "context"
+    "google.golang.org/grpc"
+    "google.golang.org/grpc/metadata"
+)
+
+// Create connection with API key
+conn, err := grpc.Dial("localhost:5557",
+    grpc.WithInsecure(),
+    grpc.WithUnaryInterceptor(func(
+        ctx context.Context,
+        method string,
+        req, reply interface{},
+        cc *grpc.ClientConn,
+        invoker grpc.UnaryInvoker,
+        opts ...grpc.CallOption,
+    ) error {
+        // Add API key to metadata
+        ctx = metadata.AppendToOutgoingContext(ctx, "authorization", apiKey)
+        return invoker(ctx, method, req, reply, cc, opts...)
+    }),
+)
+defer conn.Close()
+
+client := api.NewEnhancedLocalConnectorClient(conn)
+
+// Make authenticated request
+resp, err := client.CreateUser(ctx, &api.CreateUserReq{
+    Email:    "user@example.com",
+    Username: "newuser",
+})
+```
+
+##### Node.js/TypeScript Example
+
+```typescript
+import * as grpc from '@grpc/grpc-js';
+
+const metadata = new grpc.Metadata();
+metadata.add('authorization', process.env.DEX_API_KEY);
+
+client.createUser(
+  {
+    email: 'user@example.com',
+    username: 'newuser',
+  },
+  metadata,
+  (error, response) => {
+    if (error) {
+      console.error('Error:', error.message);
+    } else {
+      console.log('User created:', response.user);
+    }
+  }
+);
+```
+
+#### Security Features
+
+1. **Constant-Time Comparison**: API keys are validated using `crypto/subtle.ConstantTimeCompare` to prevent timing attacks
+2. **Logging**: Invalid API key attempts are logged with warning level
+3. **gRPC Status Codes**: Returns `codes.Unauthenticated` for authentication failures
+4. **Multiple Keys**: Supports multiple API keys for key rotation
+
+#### Error Responses
+
+| Error | gRPC Code | Description |
+|-------|-----------|-------------|
+| Missing metadata | `Unauthenticated` | Request does not include metadata context |
+| Missing authorization header | `Unauthenticated` | Metadata does not contain `authorization` key |
+| Invalid API key | `Unauthenticated` | Provided API key does not match any configured key |
+
+#### Development vs Production
+
+**Development** (no authentication):
+```yaml
+grpc:
+  enabled: false
+  requireAuthentication: false
+  apiKeys: []
+```
+
+**Production** (authentication required):
+```yaml
+grpc:
+  enabled: true
+  requireAuthentication: true
+  apiKeys:
+    - "${DEX_API_KEY_PRIMARY}"
+    - "${DEX_API_KEY_SECONDARY}"
+```
+
+**⚠️ Security Warning**: Never commit API keys to version control. Use environment variables.
+
+#### Best Practices
+
+1. **Generate Long Keys**: Use at least 32 characters (64+ recommended)
+2. **Use Environment Variables**: Store keys in `.env` files or secrets management
+3. **Rotate Keys**: Have at least 2 keys configured to allow rotation without downtime
+4. **Monitor Access**: Review logs for invalid API key attempts
+5. **Separate Keys**: Use different keys for different environments (dev, staging, prod)
+6. **Principle of Least Privilege**: Only share keys with services that need access
+
+#### Alternative Authentication Methods (Future)
+
+While API keys are now implemented, future versions may support:
+
+- **mTLS**: Mutual TLS certificate authentication for zero-trust networks
+- **JWT**: Platform-issued JWT tokens with expiry and claims
+
+For now, API keys provide a simple and secure authentication mechanism suitable for most deployments.
 
 ---
 
