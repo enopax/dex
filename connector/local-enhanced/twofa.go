@@ -150,8 +150,8 @@ func (c *Connector) GetAvailable2FAMethods(ctx context.Context, user *User, prim
 	// 2. Passkey is in allowed 2FA methods
 	// 3. Passkey was not used as the primary authentication method
 	if len(user.Passkeys) > 0 &&
-	   contains(c.config.TwoFactor.Methods, "passkey") &&
-	   primaryMethod != "passkey" {
+		contains(c.config.TwoFactor.Methods, "passkey") &&
+		primaryMethod != "passkey" {
 		methods = append(methods, "passkey")
 	}
 

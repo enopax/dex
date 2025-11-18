@@ -1414,18 +1414,18 @@ func (c *Connector) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
 
 	// Prepare template data
 	data := map[string]interface{}{
-		"SetupToken":              token.Token,
-		"UserID":                  user.ID,
-		"Email":                   user.Email,
-		"Username":                user.Username,
-		"PasskeyEnabled":          c.config.Passkey.Enabled,
-		"AllowSkip":               allowSkip,
-		"SkipURL":                 token.ReturnURL,
-		"ContinueURL":             token.ReturnURL,
-		"AppName":                 "Enopax", // TODO: Get from config
-		"PasskeyRegisterBeginURL": "/passkey/register/begin",
+		"SetupToken":               token.Token,
+		"UserID":                   user.ID,
+		"Email":                    user.Email,
+		"Username":                 user.Username,
+		"PasskeyEnabled":           c.config.Passkey.Enabled,
+		"AllowSkip":                allowSkip,
+		"SkipURL":                  token.ReturnURL,
+		"ContinueURL":              token.ReturnURL,
+		"AppName":                  "Enopax", // TODO: Get from config
+		"PasskeyRegisterBeginURL":  "/passkey/register/begin",
 		"PasskeyRegisterFinishURL": "/passkey/register/finish",
-		"PasswordSetupURL":        "/setup-auth/password",
+		"PasswordSetupURL":         "/setup-auth/password",
 	}
 
 	// Render template
@@ -1523,4 +1523,3 @@ func (c *Connector) handlePasswordSetup(w http.ResponseWriter, r *http.Request) 
 		"message": "Password set successfully",
 	})
 }
-

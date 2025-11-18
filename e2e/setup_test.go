@@ -46,8 +46,8 @@ func setupBrowser(t *testing.T) (*playwright.Playwright, playwright.Browser, pla
 
 	// Create browser context
 	context, err := browser.NewContext(playwright.BrowserNewContextOptions{
-		AcceptDownloads:   playwright.Bool(false),
-		IgnoreHTTPSErrors: playwright.Bool(true), // Allow self-signed certs in dev
+		AcceptDownloads:    playwright.Bool(false),
+		IgnoreHttpsErrors: playwright.Bool(true), // Allow self-signed certs in dev
 	})
 	if err != nil {
 		browser.Close()
@@ -71,11 +71,11 @@ func setupVirtualAuthenticator(t *testing.T, cdpSession playwright.CDPSession) {
 	// Add virtual authenticator with platform authenticator
 	params := map[string]interface{}{
 		"options": map[string]interface{}{
-			"protocol":    "ctap2",
-			"transport":   "internal",
+			"protocol":            "ctap2",
+			"transport":           "internal",
 			"hasUserVerification": true,
-			"isUserVerified": true,
-			"hasResidentKey": true,
+			"isUserVerified":      true,
+			"hasResidentKey":      true,
 		},
 	}
 

@@ -100,20 +100,20 @@ func TestLogger(t *testing.T) *logrus.Logger {
 
 // TestUser represents a test user with various authentication methods
 type TestUser struct {
-	ID              string
-	Email           string
-	Username        string
-	DisplayName     string
-	Password        string // Plaintext password for testing
-	PasswordHash    string // Bcrypt hash
-	EmailVerified   bool
-	TOTPSecret      string
-	TOTPEnabled     bool
+	ID               string
+	Email            string
+	Username         string
+	DisplayName      string
+	Password         string // Plaintext password for testing
+	PasswordHash     string // Bcrypt hash
+	EmailVerified    bool
+	TOTPSecret       string
+	TOTPEnabled      bool
 	MagicLinkEnabled bool
-	Require2FA      bool
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
-	LastLoginAt     time.Time
+	Require2FA       bool
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	LastLoginAt      time.Time
 }
 
 // NewTestUser creates a new test user with default values

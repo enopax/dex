@@ -365,7 +365,7 @@ func (s *GRPCServer) GetTOTPInfo(ctx context.Context, req *api.GetTOTPInfoReq) (
 	return &api.GetTOTPInfoResp{
 		NotFound: false,
 		TotpInfo: &api.TOTPInfo{
-			Enabled:               user.TOTPEnabled,
+			Enabled:              user.TOTPEnabled,
 			BackupCodesRemaining: int32(unusedCodes),
 		},
 	}, nil

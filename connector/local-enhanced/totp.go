@@ -142,8 +142,8 @@ func (c *Connector) BeginTOTPSetup(ctx context.Context, user *User) (*TOTPSetupR
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      c.config.Passkey.RPName, // Reuse RP name as issuer
 		AccountName: user.Email,
-		Period:      30,    // 30 seconds
-		SecretSize:  32,    // 256 bits
+		Period:      30, // 30 seconds
+		SecretSize:  32, // 256 bits
 		Digits:      otp.DigitsSix,
 		Algorithm:   otp.AlgorithmSHA1,
 	})
@@ -221,8 +221,8 @@ func (c *Connector) FinishTOTPSetup(ctx context.Context, user *User, secret, cod
 			return fmt.Errorf("failed to hash backup code: %w", err)
 		}
 		hashedBackupCodes[i] = BackupCode{
-			Code:  hash,
-			Used:  false,
+			Code:   hash,
+			Used:   false,
 			UsedAt: nil,
 		}
 	}
@@ -423,8 +423,8 @@ func (c *Connector) RegenerateBackupCodes(ctx context.Context, user *User, code 
 			return nil, fmt.Errorf("failed to hash backup code: %w", err)
 		}
 		hashedBackupCodes[i] = BackupCode{
-			Code:  hash,
-			Used:  false,
+			Code:   hash,
+			Used:   false,
 			UsedAt: nil,
 		}
 	}

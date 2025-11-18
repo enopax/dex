@@ -69,13 +69,13 @@ func TestUserValidate(t *testing.T) {
 		passwordHash := "$2a$10$abc123"
 		totpSecret := "JBSWY3DPEHPK3PXP"
 		user := &User{
-			ID:            "test-user-id",
-			Email:         "dave@example.com",
-			PasswordHash:  &passwordHash,
-			TOTPSecret:    &totpSecret,
-			TOTPEnabled:   true,
-			CreatedAt:     time.Now(),
-			UpdatedAt:     time.Now(),
+			ID:           "test-user-id",
+			Email:        "dave@example.com",
+			PasswordHash: &passwordHash,
+			TOTPSecret:   &totpSecret,
+			TOTPEnabled:  true,
+			CreatedAt:    time.Now(),
+			UpdatedAt:    time.Now(),
 		}
 		err := user.Validate()
 		assert.NoError(t, err)
@@ -559,7 +559,7 @@ func TestMagicLinkTokenValidate(t *testing.T) {
 		// Note: Validate() doesn't check expiry, only IsExpired() does
 		// So this test should pass validation but IsExpired() should return true
 		err := token.Validate()
-		assert.NoError(t, err) // Validation passes
+		assert.NoError(t, err)            // Validation passes
 		assert.True(t, token.IsExpired()) // But token is expired
 	})
 }

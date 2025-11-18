@@ -475,8 +475,8 @@ func TestParseCredentialCreationResponse(t *testing.T) {
 		expectError bool
 	}{
 		{
-			name: "empty credential",
-			credential: json.RawMessage(`{}`),
+			name:        "empty credential",
+			credential:  json.RawMessage(`{}`),
 			expectError: true,
 		},
 		{

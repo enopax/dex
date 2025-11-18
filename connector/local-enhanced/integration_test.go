@@ -314,11 +314,11 @@ func TestRegisterHandlers(t *testing.T) {
 			method         string
 			expectedStatus int // Expected status if handler is registered
 		}{
-			{"/login", http.MethodGet, http.StatusOK}, // Should render login page or return error
-			{"/login/password", http.MethodPost, http.StatusBadRequest}, // Should return error for missing data
-			{"/passkey/login/begin", http.MethodPost, http.StatusBadRequest}, // Should return error for missing data
-			{"/passkey/login/finish", http.MethodPost, http.StatusBadRequest}, // Should return error for missing data
-			{"/passkey/register/begin", http.MethodPost, http.StatusBadRequest}, // Should return error for missing data
+			{"/login", http.MethodGet, http.StatusOK},                            // Should render login page or return error
+			{"/login/password", http.MethodPost, http.StatusBadRequest},          // Should return error for missing data
+			{"/passkey/login/begin", http.MethodPost, http.StatusBadRequest},     // Should return error for missing data
+			{"/passkey/login/finish", http.MethodPost, http.StatusBadRequest},    // Should return error for missing data
+			{"/passkey/register/begin", http.MethodPost, http.StatusBadRequest},  // Should return error for missing data
 			{"/passkey/register/finish", http.MethodPost, http.StatusBadRequest}, // Should return error for missing data
 		}
 

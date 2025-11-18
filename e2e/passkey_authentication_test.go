@@ -55,10 +55,11 @@ func TestPasskeyAuthentication(t *testing.T) {
 
 	t.Run("ClickPasskeyLoginButton", func(t *testing.T) {
 		// Find and click the "Login with Passkey" button
-		button, err := page.Locator("button:has-text('Login with Passkey'), button:has-text('Passkey')").First()
-		require.NoError(t, err, "Failed to find passkey login button")
+		button := page.Locator("button:has-text('Login with Passkey'), button:has-text('Passkey')").First()
+		count, _ := button.Count()
+		require.Greater(t, count, 0, "Passkey login button not found")
 
-		err = button.Click()
+		err := button.Click()
 		require.NoError(t, err, "Failed to click passkey login button")
 
 		t.Log("Clicked passkey login button")

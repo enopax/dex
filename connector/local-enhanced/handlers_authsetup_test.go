@@ -49,7 +49,7 @@ func TestHandleAuthSetup(t *testing.T) {
 
 				return token
 			},
-			queryToken:     "", // Will be set by tokenSetup
+			queryToken:     "",                             // Will be set by tokenSetup
 			expectedStatus: http.StatusInternalServerError, // Template rendering not implemented
 			expectError:    true,
 		},
@@ -200,7 +200,7 @@ func TestHandlePasswordSetup(t *testing.T) {
 				return user
 			},
 			requestBody: map[string]string{
-				"user_id":  "", // Will be filled by userSetup
+				"user_id":  "",     // Will be filled by userSetup
 				"password": "weak", // Too short, no number
 			},
 			expectedStatus: http.StatusBadRequest,

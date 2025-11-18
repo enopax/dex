@@ -58,14 +58,16 @@ func TestPasskeyRegistration(t *testing.T) {
 
 	t.Run("ClickPasskeySetupButton", func(t *testing.T) {
 		// Find and click the "Set up Passkey" button
-		button, err := page.Locator("button:has-text('Set up Passkey')").First()
-		if err != nil {
+		button := page.Locator("button:has-text('Set up Passkey')").First()
+		count, _ := button.Count()
+		if count == 0 {
 			// Button might have different text
-			button, err = page.Locator("button:has-text('Passkey')").First()
+			button = page.Locator("button:has-text('Passkey')").First()
+			count, _ = button.Count()
 		}
-		require.NoError(t, err, "Failed to find passkey setup button")
+		require.Greater(t, count, 0, "Passkey setup button not found")
 
-		err = button.Click()
+		err := button.Click()
 		require.NoError(t, err, "Failed to click passkey setup button")
 
 		t.Log("Clicked passkey setup button")
@@ -73,12 +75,13 @@ func TestPasskeyRegistration(t *testing.T) {
 
 	t.Run("EnterPasskeyName", func(t *testing.T) {
 		// Wait for passkey name prompt
-		nameInput, err := page.Locator("input[name='passkey_name'], input[placeholder*='name' i]").First()
-		require.NoError(t, err, "Failed to find passkey name input")
+		nameInput := page.Locator("input[name='passkey_name'], input[placeholder*='name' i]").First()
+		count, _ := nameInput.Count()
+		require.Greater(t, count, 0, "Passkey name input not found")
 
 		// Enter passkey name
 		passkeyName := fmt.Sprintf("E2E Test Passkey %d", time.Now().Unix())
-		err = nameInput.Fill(passkeyName)
+		err := nameInput.Fill(passkeyName)
 		require.NoError(t, err, "Failed to fill passkey name")
 
 		t.Logf("Entered passkey name: %s", passkeyName)
@@ -86,10 +89,11 @@ func TestPasskeyRegistration(t *testing.T) {
 
 	t.Run("CompleteWebAuthnCeremony", func(t *testing.T) {
 		// Click confirm/register button
-		confirmButton, err := page.Locator("button:has-text('Register'), button:has-text('Create'), button:has-text('Confirm')").First()
-		require.NoError(t, err, "Failed to find confirm button")
+		confirmButton := page.Locator("button:has-text('Register'), button:has-text('Create'), button:has-text('Confirm')").First()
+		count, _ := confirmButton.Count()
+		require.Greater(t, count, 0, "Confirm button not found")
 
-		err = confirmButton.Click()
+		err := confirmButton.Click()
 		require.NoError(t, err, "Failed to click confirm button")
 
 		t.Log("Initiated WebAuthn ceremony")

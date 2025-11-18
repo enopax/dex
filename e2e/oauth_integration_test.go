@@ -61,10 +61,11 @@ func TestOAuthPasskeyFlow(t *testing.T) {
 
 	t.Run("SelectLocalConnector", func(t *testing.T) {
 		// If there are multiple connectors, select the local-enhanced one
-		localConnectorLink, err := page.Locator("a:has-text('Local'), a:has-text('Enopax')").First()
-		if err == nil {
+		localConnectorLink := page.Locator("a:has-text('Local'), a:has-text('Enopax')").First()
+		count, _ := localConnectorLink.Count()
+		if count > 0 {
 			// Connector selection page found
-			err = localConnectorLink.Click()
+			err := localConnectorLink.Click()
 			if err == nil {
 				t.Log("Selected local-enhanced connector")
 				time.Sleep(1 * time.Second)
@@ -76,13 +77,14 @@ func TestOAuthPasskeyFlow(t *testing.T) {
 
 	t.Run("AuthenticateWithPasskey", func(t *testing.T) {
 		// Find and click passkey login button
-		passkeyButton, err := page.Locator("button:has-text('Login with Passkey'), button:has-text('Passkey')").First()
-		if err != nil {
-			t.Skipf("Passkey button not found: %v", err)
+		passkeyButton := page.Locator("button:has-text('Login with Passkey'), button:has-text('Passkey')").First()
+		count, _ := passkeyButton.Count()
+		if count == 0 {
+			t.Skip("Passkey button not found")
 			return
 		}
 
-		err = passkeyButton.Click()
+		err := passkeyButton.Click()
 		require.NoError(t, err, "Failed to click passkey button")
 
 		t.Log("Initiated passkey authentication")
@@ -160,15 +162,17 @@ func TestOAuthPasswordFlow(t *testing.T) {
 		time.Sleep(1 * time.Second)
 
 		// Try to select local connector if present
-		localConnectorLink, err := page.Locator("a:has-text('Local'), a:has-text('Enopax')").First()
-		if err == nil {
+		localConnectorLink := page.Locator("a:has-text('Local'), a:has-text('Enopax')").First()
+		count, _ := localConnectorLink.Count()
+		if count > 0 {
 			localConnectorLink.Click()
 			time.Sleep(1 * time.Second)
 		}
 
 		// Fill in password login form
-		usernameInput, err := page.Locator("input[name='username'], input[name='email'], input[type='email']").First()
-		if err != nil {
+		usernameInput := page.Locator("input[name='username'], input[name='email'], input[type='email']").First()
+		count, _ = usernameInput.Count()
+		if count == 0 {
 			t.Skip("Password login form not found")
 			return
 		}
@@ -176,15 +180,14 @@ func TestOAuthPasswordFlow(t *testing.T) {
 		err = usernameInput.Fill("test@example.com")
 		require.NoError(t, err, "Failed to fill username")
 
-		passwordInput, err := page.Locator("input[name='password'], input[type='password']").First()
-		require.NoError(t, err, "Failed to find password input")
-
+		passwordInput := page.Locator("input[name='password'], input[type='password']").First()
 		err = passwordInput.Fill("testpassword123")
 		require.NoError(t, err, "Failed to fill password")
 
 		// Submit form
-		submitButton, err := page.Locator("button[type='submit'], button:has-text('Login'), button:has-text('Sign in')").First()
-		require.NoError(t, err, "Failed to find submit button")
+		submitButton := page.Locator("button[type='submit'], button:has-text('Login'), button:has-text('Sign in')").First()
+		count, _ = submitButton.Count()
+		require.Greater(t, count, 0, "Submit button not found")
 
 		err = submitButton.Click()
 		require.NoError(t, err, "Failed to click submit button")
@@ -195,17 +198,19 @@ func TestOAuthPasswordFlow(t *testing.T) {
 
 	t.Run("Handle2FAIfRequired", func(t *testing.T) {
 		// Check if 2FA prompt appears
-		totpInput, err := page.Locator("input[name='code'], input[placeholder*='code' i]").First()
-		if err == nil {
+		totpInput := page.Locator("input[name='code'], input[placeholder*='code' i]").First()
+		count, _ := totpInput.Count()
+		if count > 0 {
 			// 2FA is required
 			t.Log("2FA prompt detected")
 
 			// Enter TOTP code (this would need to be generated)
 			// For testing purposes, we skip this or use a test code
-			err = totpInput.Fill("123456")
+			err := totpInput.Fill("123456")
 			if err == nil {
-				submitButton, err := page.Locator("button[type='submit']:has-text('Verify'), button:has-text('Submit')").First()
-				if err == nil {
+				submitButton := page.Locator("button[type='submit']:has-text('Verify'), button:has-text('Submit')").First()
+				count, _ := submitButton.Count()
+				if count > 0 {
 					submitButton.Click()
 					time.Sleep(2 * time.Second)
 				}
@@ -364,15 +369,17 @@ func TestOAuthFlowWithLoginHint(t *testing.T) {
 		time.Sleep(1 * time.Second)
 
 		// Try to select local connector if present
-		localConnectorLink, err := page.Locator("a:has-text('Local'), a:has-text('Enopax')").First()
-		if err == nil {
+		localConnectorLink := page.Locator("a:has-text('Local'), a:has-text('Enopax')").First()
+		count, _ := localConnectorLink.Count()
+		if count > 0 {
 			localConnectorLink.Click()
 			time.Sleep(1 * time.Second)
 		}
 
 		// Check if email field is pre-filled
-		emailInput, err := page.Locator("input[name='username'], input[name='email'], input[type='email']").First()
-		if err != nil {
+		emailInput := page.Locator("input[name='username'], input[name='email'], input[type='email']").First()
+		count, _ = emailInput.Count()
+		if count == 0 {
 			t.Skip("Email input not found")
 			return
 		}
