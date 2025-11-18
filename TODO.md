@@ -119,14 +119,15 @@ This implementation plan covers building an **Enhanced Local Connector** for Dex
 #### Infrastructure
 - [x] Create feature branch `feature/passkeys` (DONE)
 - [x] Set up development environment documentation
-- [ ] Configure Go module dependencies
+- [x] Configure Go module dependencies (DONE - go.mod updated with webauthn, otp, jwt, qrcode)
 - [ ] Set up testing infrastructure
 
 #### Dependencies
-- [ ] Add `github.com/go-webauthn/webauthn` (WebAuthn support)
-- [ ] Add `github.com/pquerna/otp` (TOTP support)
-- [ ] Add `github.com/golang-jwt/jwt/v5` (JWT for magic links)
-- [ ] Add testing dependencies (testify, mock libraries)
+- [x] Add `github.com/go-webauthn/webauthn` (WebAuthn support) - v0.11.2
+- [x] Add `github.com/pquerna/otp` (TOTP support) - v1.4.0
+- [x] Add `github.com/golang-jwt/jwt/v5` (JWT for magic links) - v5.2.1
+- [x] Add `github.com/skip2/go-qrcode` (QR code generation for TOTP) - v0.0.0-20200617195104
+- [x] Add testing dependencies (testify already available in project)
 
 #### Documentation
 - [ ] Create DEVELOPMENT.md with setup instructions

@@ -617,6 +617,25 @@ make verify
 
 ### Working with Dependencies
 
+#### Project Dependencies
+
+This project includes the following key dependencies for the enhanced local connector:
+
+**WebAuthn/Passkey Support**:
+- `github.com/go-webauthn/webauthn` v0.11.2 - WebAuthn library for passkey registration and authentication
+
+**TOTP 2FA**:
+- `github.com/pquerna/otp` v1.4.0 - Time-based one-time password (TOTP) implementation
+- `github.com/skip2/go-qrcode` v0.0.0-20200617195104 - QR code generation for TOTP setup
+
+**JWT/Magic Links**:
+- `github.com/golang-jwt/jwt/v5` v5.2.1 - JWT token generation and validation for magic links
+
+**Testing**:
+- `github.com/stretchr/testify` v1.11.1 - Already included in project for assertions and test utilities
+
+#### Managing Dependencies
+
 ```bash
 # Add a new dependency
 go get github.com/go-webauthn/webauthn@v0.11.2
@@ -626,6 +645,12 @@ make go-mod-tidy
 
 # Verify go.mod changes
 make verify-go-mod
+
+# Check for dependency updates
+go list -u -m all
+
+# View dependency tree
+go mod graph
 ```
 
 ---
