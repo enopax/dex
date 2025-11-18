@@ -395,6 +395,59 @@ This implementation plan covers building an **Enhanced Local Connector** for Dex
 
 ---
 
+### Week 7.5: Integration Testing (COMPLETE - 2025-11-18)
+
+**Status**: ✅ COMPLETE - Integration tests implemented, coverage improved to 78.5%
+
+#### Test Coverage Achievements
+- **Final coverage**: 78.5% (improved from 71.6% - a 6.9 percentage point increase)
+- **Critical functions** (100% coverage):
+  - ✅ `LoginURL` (local.go:65) - OAuth integration
+  - ✅ `HandleCallback` (local.go:75) - OAuth integration
+  - ✅ `Refresh` (local.go:116)
+  - ✅ `RegisterHandlers` (local.go:122)
+- **Partial coverage** (requires browser testing):
+  - `FinishPasskeyRegistration` (18.5%) - Session validation tested, WebAuthn verification requires real authenticator
+  - `FinishPasskeyAuthentication` (12.8%) - Session validation tested, signature verification requires real authenticator
+
+#### Integration Tests Implemented
+- [x] Test complete passkey registration flow (begin → finish)
+  - [x] Test session creation and validation
+  - [x] Test WebAuthn options generation
+  - [x] Test challenge uniqueness (10 unique challenges)
+  - [x] Test session expiry handling (5-minute TTL)
+  - [x] Test error handling for invalid sessions
+
+- [x] Test complete passkey authentication flow (begin → finish)
+  - [x] Test authentication session creation
+  - [x] Test session validation in finish endpoint
+  - [x] Test user lookup by credential ID
+  - [x] Test sign counter validation setup
+  - [x] Test error handling for invalid sessions
+
+- [x] Test OAuth integration flow
+  - [x] Test `LoginURL` returns correct redirect URL with state
+  - [x] Test `HandleCallback` retrieves user and builds identity
+  - [x] Test `HandleCallback` validates user_id parameter
+  - [x] Test error handling for missing/invalid user_id
+  - [x] Test PreferredUsername fallback logic (display name → username → email)
+
+- [x] Test `Refresh` connector method
+- [x] Test `RegisterHandlers` correctly registers all HTTP endpoints
+- [x] Test login page handler (state and callback validation)
+- [x] Test cleanup of expired sessions
+
+#### Test Files Created
+- `integration_test.go` - 17 test functions, 60+ sub-tests covering OAuth, authentication flows, and session management
+
+**Deliverable**: ✅ 78.5% test coverage achieved, all critical OAuth functions at 100%
+
+**Note**: Remaining uncovered code primarily in:
+- WebAuthn cryptographic verification (requires browser/virtual authenticator)
+- Unimplemented TOTP/Magic Link handlers (Phase 3-4 features)
+
+---
+
 ## Phase 3: TOTP 2FA
 
 ### Week 8: TOTP Implementation

@@ -1129,6 +1129,120 @@ staticClients:
 
 ---
 
+### Integration Testing (Phase 2 Week 7.5 - COMPLETE)
+
+**Purpose**: Comprehensive integration tests to validate critical authentication flows and improve code coverage.
+
+**Location**: `connector/local-enhanced/integration_test.go`
+
+#### Test Coverage Achievements
+
+**Overall Coverage**: 78.5% (improved from 71.6% - a 6.9 percentage point increase)
+
+**Critical Functions Tested** (100% coverage achieved):
+- `LoginURL` - OAuth login URL generation
+- `HandleCallback` - OAuth callback handling and identity mapping
+- `Refresh` - Token refresh flow
+- `RegisterHandlers` - HTTP endpoint registration
+
+**Integration Tests Implemented**:
+
+1. **Complete Passkey Registration Flow**:
+   - Session creation and validation
+   - WebAuthn options generation
+   - Challenge uniqueness verification
+   - Session expiry handling (5-minute TTL)
+
+2. **Complete Passkey Authentication Flow**:
+   - Authentication session creation
+   - Credential lookup by ID
+   - Sign counter validation
+   - User authentication verification
+
+3. **OAuth Integration Flow**:
+   - LoginURL with state and callback parameters
+   - HandleCallback with valid user_id
+   - HandleCallback error handling (missing/invalid user_id)
+   - PreferredUsername fallback logic (display name → username → email)
+
+4. **Session Management**:
+   - Session expiry validation
+   - Session TTL verification (5 minutes)
+   - Challenge generation (32 bytes, cryptographically secure)
+   - Challenge uniqueness (10 unique challenges generated)
+   - Expired session cleanup
+
+5. **Handler Registration**:
+   - All endpoints registered correctly:
+     - `/login` - Login page
+     - `/login/password` - Password authentication
+     - `/passkey/login/begin` - Begin passkey authentication
+     - `/passkey/login/finish` - Complete passkey authentication
+     - `/passkey/register/begin` - Begin passkey registration
+     - `/passkey/register/finish` - Complete passkey registration
+
+6. **WebAuthn Configuration**:
+   - WebAuthn library initialization
+   - RP ID, RP Name, and Origins validation
+   - Authenticator selection options
+
+#### Partial Coverage Areas
+
+**FinishPasskeyRegistration** (18.5% coverage):
+- Reason: Requires real WebAuthn attestation data from authenticator
+- Tested: Session validation, expiry checks, operation type validation
+- Untested: Cryptographic verification (requires browser/virtual authenticator)
+
+**FinishPasskeyAuthentication** (12.8% coverage):
+- Reason: Requires real WebAuthn assertion with valid signature
+- Tested: Session validation, credential lookup, error handling
+- Untested: Signature verification, sign counter update (requires browser/virtual authenticator)
+
+#### Test Files
+
+**Primary Integration Tests**:
+- `integration_test.go` - OAuth, authentication flows, session management (17 test functions, 60+ sub-tests)
+- `handlers_test.go` - HTTP endpoint validation (8 test functions, 40+ sub-tests)
+- `passkey_test.go` - WebAuthn interface and helpers (8 test functions)
+- `storage_test.go` - Storage operations (10 test functions, 84.1% coverage)
+- `validation_test.go` - Data validation (5 test functions)
+
+**Test Infrastructure**:
+- `testing.go` - Test utilities and helpers
+- Mock email sender for magic link testing
+- File permission validation helpers
+- Test context with 30-second timeout
+- Automatic cleanup of test storage
+
+#### Running Integration Tests
+
+```bash
+# Run all integration tests
+go test -v ./connector/local-enhanced/ -run Integration
+
+# Run OAuth integration tests only
+go test -v ./connector/local-enhanced/ -run TestOAuthIntegration
+
+# Run with coverage
+go test -coverprofile=coverage.out ./connector/local-enhanced/
+go tool cover -html=coverage.out
+
+# View coverage by function
+go tool cover -func=coverage.out | grep -E "(FinishPasskey|LoginURL|HandleCallback)"
+```
+
+#### Next Steps for Testing
+
+- [ ] End-to-end browser tests with virtual authenticator (Chrome DevTools)
+- [ ] Test complete registration flow with real WebAuthn credential
+- [ ] Test complete authentication flow with signature verification
+- [ ] Cross-browser compatibility testing (Chrome, Safari, Firefox, Edge)
+- [ ] Load testing for concurrent authentication requests
+
+**Status**: Integration testing complete, 78.5% coverage achieved, critical OAuth functions at 100%
+
+---
+
 ### Go Code Standards
 
 **Imports**:
