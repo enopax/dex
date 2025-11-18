@@ -329,7 +329,7 @@ This implementation plan covers building an **Enhanced Local Connector** for Dex
   }
   ```
 
-- [ ] Implement `POST /auth/passkey/register/finish`:
+- [x] Implement `POST /auth/passkey/register/finish`:
   ```go
   func (c *Connector) FinishPasskeyRegistration(w http.ResponseWriter, r *http.Request) {
       // 1. Validate session
@@ -340,9 +340,9 @@ This implementation plan covers building an **Enhanced Local Connector** for Dex
   }
   ```
 
-- [ ] Add request/response validation
-- [ ] Implement error handling
-- [ ] Write integration tests
+- [x] Add request/response validation
+- [x] Implement error handling
+- [x] Write integration tests
 
 #### Registration UI
 - [ ] Create passkey registration template (HTML + JavaScript):

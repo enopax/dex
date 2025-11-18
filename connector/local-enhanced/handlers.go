@@ -1,8 +1,11 @@
 package local
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
+
+	"github.com/go-webauthn/webauthn/protocol"
 )
 
 // HTTP handler stubs - to be implemented in subsequent phases
@@ -140,10 +143,132 @@ func (c *Connector) handlePasskeyRegisterBegin(w http.ResponseWriter, r *http.Re
 	c.logger.Infof("passkey registration begin successful for user %s (session: %s)", user.ID, session.SessionID)
 }
 
+// PasskeyRegisterFinishRequest represents the request body for completing passkey registration.
+type PasskeyRegisterFinishRequest struct {
+	// SessionID is the session identifier from the begin call
+	SessionID string `json:"session_id"`
+
+	// Credential contains the credential creation response from navigator.credentials.create()
+	Credential json.RawMessage `json:"credential"`
+
+	// PasskeyName is the user-friendly name for this passkey (e.g., "MacBook Touch ID")
+	PasskeyName string `json:"passkey_name"`
+}
+
+// PasskeyRegisterFinishResponse represents the response from completing passkey registration.
+type PasskeyRegisterFinishResponse struct {
+	// Success indicates whether the registration was successful
+	Success bool `json:"success"`
+
+	// PasskeyID is the ID of the newly created passkey
+	PasskeyID string `json:"passkey_id,omitempty"`
+
+	// Message provides additional information
+	Message string `json:"message,omitempty"`
+}
+
 // handlePasskeyRegisterFinish completes passkey registration.
+//
+// This endpoint:
+// 1. Validates the request and session
+// 2. Parses the credential creation response from the browser
+// 3. Calls FinishPasskeyRegistration to verify and store the credential
+// 4. Returns success with the passkey ID
+//
+// Request body:
+//
+//	{
+//	  "session_id": "base64-session-id",
+//	  "credential": { ... PublicKeyCredential object ... },
+//	  "passkey_name": "MacBook Touch ID"
+//	}
+//
+// Response:
+//
+//	{
+//	  "success": true,
+//	  "passkey_id": "passkey-id",
+//	  "message": "Passkey registered successfully"
+//	}
 func (c *Connector) handlePasskeyRegisterFinish(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement in Phase 2 Week 6
-	http.Error(w, "Not implemented", http.StatusNotImplemented)
+	// Only accept POST requests
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Check if passkeys are enabled
+	if !c.config.Passkey.Enabled {
+		c.logger.Warn("passkey registration finish attempted but passkeys are disabled")
+		http.Error(w, "Passkeys are not enabled", http.StatusForbidden)
+		return
+	}
+
+	// Parse request body
+	var req PasskeyRegisterFinishRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		c.logger.Errorf("failed to parse request body: %v", err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate required fields
+	if req.SessionID == "" {
+		http.Error(w, "session_id is required", http.StatusBadRequest)
+		return
+	}
+	if len(req.Credential) == 0 {
+		http.Error(w, "credential is required", http.StatusBadRequest)
+		return
+	}
+	if req.PasskeyName == "" {
+		http.Error(w, "passkey_name is required", http.StatusBadRequest)
+		return
+	}
+
+	// Parse credential from JSON - we need to import the protocol package
+	// The credential comes from the browser as a PublicKeyCredential object
+	// which we need to parse into the format expected by go-webauthn
+	ctx := r.Context()
+	parsedResponse, err := c.parseCredentialCreationResponse(req.Credential)
+	if err != nil {
+		c.logger.Errorf("failed to parse credential: %v", err)
+		http.Error(w, "Invalid credential format", http.StatusBadRequest)
+		return
+	}
+
+	// Finish passkey registration
+	passkey, err := c.FinishPasskeyRegistration(ctx, req.SessionID, parsedResponse, req.PasskeyName)
+	if err != nil {
+		c.logger.Errorf("failed to finish passkey registration: %v", err)
+
+		// Provide more specific error messages
+		if err.Error() == "invalid session" || err.Error() == "session expired" {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+		} else if err.Error() == "credential verification failed" {
+			http.Error(w, "Credential verification failed", http.StatusBadRequest)
+		} else {
+			http.Error(w, "Failed to complete registration", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Prepare response
+	resp := PasskeyRegisterFinishResponse{
+		Success:   true,
+		PasskeyID: passkey.ID,
+		Message:   "Passkey registered successfully",
+	}
+
+	// Send response
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		c.logger.Errorf("failed to encode response: %v", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
+
+	c.logger.Infof("passkey registration complete for passkey %s (name: %s)", passkey.ID, passkey.Name)
 }
 
 // handleTOTPVerify verifies a TOTP code.
@@ -180,4 +305,24 @@ func (c *Connector) handleMagicLinkVerify(w http.ResponseWriter, r *http.Request
 func (c *Connector) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
 	// TODO: Implement in Phase 6 Week 12
 	http.Error(w, "Not implemented", http.StatusNotImplemented)
+}
+
+// Helper functions
+
+// parseCredentialCreationResponse parses the credential creation response from the browser.
+//
+// The browser sends a PublicKeyCredential object which contains the attestation response.
+// This function uses the go-webauthn protocol package to parse it into the expected format.
+func (c *Connector) parseCredentialCreationResponse(credentialJSON json.RawMessage) (*protocol.ParsedCredentialCreationData, error) {
+	// Parse the credential using the protocol package
+	// The protocol package provides a ParseCredentialCreationResponse function
+	// that handles all the base64 decoding and validation
+	// We need to convert json.RawMessage to io.Reader first
+	reader := bytes.NewReader(credentialJSON)
+	ccr, err := protocol.ParseCredentialCreationResponseBody(reader)
+	if err != nil {
+		return nil, err
+	}
+
+	return ccr, nil
 }
