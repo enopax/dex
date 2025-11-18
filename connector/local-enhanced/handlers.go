@@ -1020,13 +1020,6 @@ func (c *Connector) handleMagicLinkVerify(w http.ResponseWriter, r *http.Request
 	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 }
 
-// handleAuthSetup handles the auth setup flow.
-func (c *Connector) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement in Phase 6 Week 12
-	c.logger.Info("handleAuthSetup: not yet implemented")
-	http.Error(w, "Auth setup not yet implemented", http.StatusNotImplemented)
-}
-
 // Helper functions
 
 // parseCredentialCreationResponse parses the credential creation response from the browser.
@@ -1360,6 +1353,174 @@ func (c *Connector) handle2FAVerifyPasskeyFinish(w http.ResponseWriter, r *http.
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
 		"user_id": user.ID,
+	})
+}
+
+// ========================
+// Auth Setup Handlers
+// ========================
+
+// handleAuthSetup displays the auth setup page where users choose their authentication method(s).
+//
+// This handler is called when a user clicks the setup link from their registration email.
+// The setup token is validated and the user is shown options to set up:
+// - Passkey (WebAuthn)
+// - Password
+// - Both (recommended)
+//
+// GET /setup-auth?token=...
+func (c *Connector) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
+	// Only accept GET requests
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get token from query parameter
+	tokenStr := r.URL.Query().Get("token")
+	if tokenStr == "" {
+		c.logger.Error("handleAuthSetup: missing token parameter")
+		http.Error(w, "Missing token parameter", http.StatusBadRequest)
+		return
+	}
+
+	// Get token from storage
+	ctx := r.Context()
+	token, err := c.storage.GetAuthSetupToken(ctx, tokenStr)
+	if err != nil {
+		c.logger.Errorf("handleAuthSetup: failed to get token: %v", err)
+		http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
+		return
+	}
+
+	// Validate token
+	if err := token.Validate(); err != nil {
+		c.logger.Errorf("handleAuthSetup: token validation failed: %v", err)
+		http.Error(w, fmt.Sprintf("Invalid token: %v", err), http.StatusUnauthorized)
+		return
+	}
+
+	// Get user
+	user, err := c.storage.GetUser(ctx, token.UserID)
+	if err != nil {
+		c.logger.Errorf("handleAuthSetup: failed to get user: %v", err)
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	// Check if user already has auth methods set up
+	hasAuthMethods := user.PasswordHash != nil || len(user.Passkeys) > 0
+	allowSkip := hasAuthMethods // Allow skip if they already have auth methods
+
+	// Prepare template data
+	data := map[string]interface{}{
+		"SetupToken":              token.Token,
+		"UserID":                  user.ID,
+		"Email":                   user.Email,
+		"Username":                user.Username,
+		"PasskeyEnabled":          c.config.Passkey.Enabled,
+		"AllowSkip":               allowSkip,
+		"SkipURL":                 token.ReturnURL,
+		"ContinueURL":             token.ReturnURL,
+		"AppName":                 "Enopax", // TODO: Get from config
+		"PasskeyRegisterBeginURL": "/passkey/register/begin",
+		"PasskeyRegisterFinishURL": "/passkey/register/finish",
+		"PasswordSetupURL":        "/setup-auth/password",
+	}
+
+	// Render template
+	if err := c.templates.RenderSetupAuth(w, data); err != nil {
+		c.logger.Errorf("handleAuthSetup: failed to render template: %v", err)
+		http.Error(w, "Failed to render page", http.StatusInternalServerError)
+		return
+	}
+
+	c.logger.Infof("handleAuthSetup: displayed setup page for user %s", user.ID)
+}
+
+// PasswordSetupRequest represents the request to set up a password during auth setup.
+type PasswordSetupRequest struct {
+	UserID   string `json:"user_id"`
+	Password string `json:"password"`
+}
+
+// handlePasswordSetup handles password setup during the auth setup flow.
+//
+// This endpoint:
+// 1. Validates the user_id and password
+// 2. Sets the password for the user
+// 3. Returns success
+//
+// POST /setup-auth/password
+// Request body:
+//
+//	{
+//	  "user_id": "user-uuid",
+//	  "password": "SecurePass123"
+//	}
+//
+// Response:
+//
+//	{
+//	  "success": true,
+//	  "message": "Password set successfully"
+//	}
+func (c *Connector) handlePasswordSetup(w http.ResponseWriter, r *http.Request) {
+	// Only accept POST requests
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse request body
+	var req PasswordSetupRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		c.logger.Errorf("handlePasswordSetup: failed to parse request body: %v", err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate required fields
+	if req.UserID == "" {
+		http.Error(w, "user_id is required", http.StatusBadRequest)
+		return
+	}
+
+	if req.Password == "" {
+		http.Error(w, "password is required", http.StatusBadRequest)
+		return
+	}
+
+	// Validate password strength
+	if err := ValidatePassword(req.Password); err != nil {
+		c.logger.Warnf("handlePasswordSetup: password validation failed: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Get user
+	ctx := r.Context()
+	user, err := c.storage.GetUser(ctx, req.UserID)
+	if err != nil {
+		c.logger.Errorf("handlePasswordSetup: failed to get user: %v", err)
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	// Set password
+	if err := c.SetPassword(ctx, user, req.Password); err != nil {
+		c.logger.Errorf("handlePasswordSetup: failed to set password: %v", err)
+		http.Error(w, "Failed to set password", http.StatusInternalServerError)
+		return
+	}
+
+	c.logger.Infof("handlePasswordSetup: password set for user %s", req.UserID)
+
+	// Return success
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Password set successfully",
 	})
 }
 

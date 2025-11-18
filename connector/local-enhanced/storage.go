@@ -66,6 +66,11 @@ type Storage interface {
 	Get2FASession(ctx context.Context, sessionID string) (*TwoFactorSession, error)
 	Delete2FASession(ctx context.Context, sessionID string) error
 
+	// Auth setup token operations
+	SaveAuthSetupToken(ctx context.Context, token *AuthSetupToken) error
+	GetAuthSetupToken(ctx context.Context, token string) (*AuthSetupToken, error)
+	DeleteAuthSetupToken(ctx context.Context, token string) error
+
 	// Cleanup operations
 	CleanupExpiredSessions(ctx context.Context) error
 	CleanupExpiredTokens(ctx context.Context) error
@@ -86,6 +91,7 @@ func NewFileStorage(dataDir string) (*FileStorage, error) {
 		filepath.Join(dataDir, "sessions"),
 		filepath.Join(dataDir, "tokens"),
 		filepath.Join(dataDir, "2fa-sessions"),
+		filepath.Join(dataDir, "auth-setup-tokens"),
 	}
 
 	for _, dir := range dirs {
@@ -602,4 +608,44 @@ func GenerateSecureToken() (string, error) {
 // GenerateSessionID generates a cryptographically secure session ID.
 func GenerateSessionID() (string, error) {
 	return GenerateSecureToken()
+}
+
+// Auth setup token operations
+
+// SaveAuthSetupToken saves an auth setup token.
+func (s *FileStorage) SaveAuthSetupToken(ctx context.Context, token *AuthSetupToken) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	tokenPath := filepath.Join(s.dataDir, "auth-setup-tokens", token.Token+".json")
+	return s.writeFile(tokenPath, token)
+}
+
+// GetAuthSetupToken retrieves an auth setup token.
+func (s *FileStorage) GetAuthSetupToken(ctx context.Context, token string) (*AuthSetupToken, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	tokenPath := filepath.Join(s.dataDir, "auth-setup-tokens", token+".json")
+	var setupToken AuthSetupToken
+	if err := s.readFile(tokenPath, &setupToken); err != nil {
+		if os.IsNotExist(err) {
+			return nil, ErrTokenNotFound
+		}
+		return nil, err
+	}
+
+	return &setupToken, nil
+}
+
+// DeleteAuthSetupToken deletes an auth setup token.
+func (s *FileStorage) DeleteAuthSetupToken(ctx context.Context, token string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	tokenPath := filepath.Join(s.dataDir, "auth-setup-tokens", token+".json")
+	if err := os.Remove(tokenPath); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
