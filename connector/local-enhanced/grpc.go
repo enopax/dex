@@ -59,8 +59,8 @@ func (s *GRPCServer) CreateUser(ctx context.Context, req *api.CreateUserReq) (*a
 		return nil, fmt.Errorf("invalid user: %w", err)
 	}
 
-	// Save user
-	if err := s.connector.storage.SaveUser(ctx, user); err != nil {
+	// Create user
+	if err := s.connector.storage.CreateUser(ctx, user); err != nil {
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
@@ -120,7 +120,7 @@ func (s *GRPCServer) UpdateUser(ctx context.Context, req *api.UpdateUserReq) (*a
 		user.DisplayName = req.DisplayName
 	}
 	user.EmailVerified = req.EmailVerified
-	user.Require2FA = req.Require2Fa
+	user.Require2FA = req.Require_2Fa
 	user.UpdatedAt = time.Now()
 
 	// Validate updated user
@@ -129,7 +129,7 @@ func (s *GRPCServer) UpdateUser(ctx context.Context, req *api.UpdateUserReq) (*a
 	}
 
 	// Save updated user
-	if err := s.connector.storage.SaveUser(ctx, user); err != nil {
+	if err := s.connector.storage.UpdateUser(ctx, user); err != nil {
 		return nil, fmt.Errorf("failed to update user: %w", err)
 	}
 
@@ -248,7 +248,7 @@ func (s *GRPCServer) EnableTOTP(ctx context.Context, req *api.EnableTOTPReq) (*a
 	}
 
 	// Begin TOTP setup
-	secret, qrCode, otpauthURL, backupCodes, err := s.connector.BeginTOTPSetup(ctx, user)
+	result, err := s.connector.BeginTOTPSetup(ctx, user)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin TOTP setup: %w", err)
 	}
@@ -258,10 +258,10 @@ func (s *GRPCServer) EnableTOTP(ctx context.Context, req *api.EnableTOTPReq) (*a
 	return &api.EnableTOTPResp{
 		NotFound:       false,
 		AlreadyEnabled: false,
-		Secret:         secret,
-		QrCode:         qrCode,
-		OtpauthUrl:     otpauthURL,
-		BackupCodes:    backupCodes,
+		Secret:         result.Secret,
+		QrCode:         result.QRCodeDataURL,
+		OtpauthUrl:     result.URL,
+		BackupCodes:    result.BackupCodes,
 	}, nil
 }
 
@@ -461,7 +461,7 @@ func (s *GRPCServer) RenamePasskey(ctx context.Context, req *api.RenamePasskeyRe
 
 	// Save user
 	user.UpdatedAt = time.Now()
-	if err := s.connector.storage.SaveUser(ctx, user); err != nil {
+	if err := s.connector.storage.UpdateUser(ctx, user); err != nil {
 		return nil, fmt.Errorf("failed to save user: %w", err)
 	}
 
@@ -509,7 +509,7 @@ func (s *GRPCServer) DeletePasskey(ctx context.Context, req *api.DeletePasskeyRe
 	// Save user with updated passkeys
 	user.Passkeys = newPasskeys
 	user.UpdatedAt = time.Now()
-	if err := s.connector.storage.SaveUser(ctx, user); err != nil {
+	if err := s.connector.storage.UpdateUser(ctx, user); err != nil {
 		return nil, fmt.Errorf("failed to save user: %w", err)
 	}
 
@@ -545,29 +545,34 @@ func (s *GRPCServer) GetAuthMethods(ctx context.Context, req *api.GetAuthMethods
 
 // convertUserToProto converts a User to protobuf EnhancedUser.
 func convertUserToProto(user *User) *api.EnhancedUser {
+	var lastLoginAt int64
+	if user.LastLoginAt != nil {
+		lastLoginAt = user.LastLoginAt.Unix()
+	}
+
 	return &api.EnhancedUser{
 		Id:            user.ID,
 		Email:         user.Email,
 		Username:      user.Username,
 		DisplayName:   user.DisplayName,
 		EmailVerified: user.EmailVerified,
-		Require2Fa:    user.Require2FA,
+		Require_2Fa:   user.Require2FA,
 		CreatedAt:     user.CreatedAt.Unix(),
 		UpdatedAt:     user.UpdatedAt.Unix(),
-		LastLoginAt:   user.LastLoginAt.Unix(),
+		LastLoginAt:   lastLoginAt,
 	}
 }
 
 // convertPasskeyToProto converts a Passkey to protobuf Passkey.
 func convertPasskeyToProto(passkey *Passkey) *api.Passkey {
 	return &api.Passkey{
-		Id:              passkey.ID,
-		UserId:          passkey.UserID,
-		Name:            passkey.Name,
-		CreatedAt:       passkey.CreatedAt.Unix(),
-		LastUsedAt:      passkey.LastUsedAt.Unix(),
-		Transports:      transportStrings(passkey.Transports),
-		BackupEligible:  passkey.BackupEligible,
-		BackupState:     passkey.BackupState,
+		Id:             passkey.ID,
+		UserId:         passkey.UserID,
+		Name:           passkey.Name,
+		CreatedAt:      passkey.CreatedAt.Unix(),
+		LastUsedAt:     passkey.LastUsedAt.Unix(),
+		Transports:     passkey.Transports,
+		BackupEligible: passkey.BackupEligible,
+		BackupState:    passkey.BackupState,
 	}
 }

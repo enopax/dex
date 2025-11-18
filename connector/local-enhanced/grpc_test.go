@@ -2,6 +2,7 @@ package local
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -76,7 +77,7 @@ func TestGRPCServer_GetUser(t *testing.T) {
 
 	// Create test user
 	user := NewTestUser("alice@example.com")
-	require.NoError(t, connector.storage.SaveUser(ctx, user))
+	require.NoError(t, connector.storage.CreateUser(ctx, user.ToUser()))
 
 	t.Run("get by user_id", func(t *testing.T) {
 		resp, err := server.GetUser(ctx, &api.GetUserReq{
@@ -124,7 +125,7 @@ func TestGRPCServer_UpdateUser(t *testing.T) {
 
 	// Create test user
 	user := NewTestUser("alice@example.com")
-	require.NoError(t, connector.storage.SaveUser(ctx, user))
+	require.NoError(t, connector.storage.CreateUser(ctx, user.ToUser()))
 
 	t.Run("update user", func(t *testing.T) {
 		resp, err := server.UpdateUser(ctx, &api.UpdateUserReq{
@@ -132,7 +133,7 @@ func TestGRPCServer_UpdateUser(t *testing.T) {
 			Username:      "alice_updated",
 			DisplayName:   "Alice Updated",
 			EmailVerified: true,
-			Require2Fa:    true,
+			Require_2Fa:   true,
 		})
 		require.NoError(t, err)
 		assert.False(t, resp.NotFound)
@@ -166,7 +167,7 @@ func TestGRPCServer_DeleteUser(t *testing.T) {
 
 	// Create test user
 	user := NewTestUser("alice@example.com")
-	require.NoError(t, connector.storage.SaveUser(ctx, user))
+	require.NoError(t, connector.storage.CreateUser(ctx, user.ToUser()))
 
 	t.Run("delete user", func(t *testing.T) {
 		resp, err := server.DeleteUser(ctx, &api.DeleteUserReq{
@@ -199,7 +200,7 @@ func TestGRPCServer_SetPassword(t *testing.T) {
 
 	// Create test user
 	user := NewTestUser("alice@example.com")
-	require.NoError(t, connector.storage.SaveUser(ctx, user))
+	require.NoError(t, connector.storage.CreateUser(ctx, user.ToUser()))
 
 	t.Run("set password", func(t *testing.T) {
 		resp, err := server.SetPassword(ctx, &api.SetPasswordReq{
@@ -244,8 +245,8 @@ func TestGRPCServer_RemovePassword(t *testing.T) {
 
 	// Create test user with password
 	user := NewTestUser("alice@example.com")
-	require.NoError(t, connector.SetPassword(ctx, user, "SecurePass123"))
-	require.NoError(t, connector.storage.SaveUser(ctx, user))
+	require.NoError(t, connector.SetPassword(ctx, user.ToUser(), "SecurePass123"))
+	require.NoError(t, connector.storage.CreateUser(ctx, user.ToUser()))
 
 	t.Run("remove password", func(t *testing.T) {
 		resp, err := server.RemovePassword(ctx, &api.RemovePasswordReq{
@@ -279,7 +280,7 @@ func TestGRPCServer_EnableTOTP(t *testing.T) {
 
 	// Create test user
 	user := NewTestUser("alice@example.com")
-	require.NoError(t, connector.storage.SaveUser(ctx, user))
+	require.NoError(t, connector.storage.CreateUser(ctx, user.ToUser()))
 
 	t.Run("enable TOTP", func(t *testing.T) {
 		resp, err := server.EnableTOTP(ctx, &api.EnableTOTPReq{
@@ -297,7 +298,7 @@ func TestGRPCServer_EnableTOTP(t *testing.T) {
 	t.Run("TOTP already enabled", func(t *testing.T) {
 		// Enable TOTP first
 		user.TOTPEnabled = true
-		require.NoError(t, connector.storage.SaveUser(ctx, user))
+		require.NoError(t, connector.storage.CreateUser(ctx, user.ToUser()))
 
 		resp, err := server.EnableTOTP(ctx, &api.EnableTOTPReq{
 			UserId: user.ID,
@@ -324,11 +325,12 @@ func TestGRPCServer_ListPasskeys(t *testing.T) {
 	ctx := TestContext(t)
 
 	// Create test user with passkeys
-	user := NewTestUser("alice@example.com")
+	testUser := NewTestUser("alice@example.com")
+	user := testUser.ToUser()
 	passkey1 := NewTestPasskey(user.ID, "MacBook Touch ID")
 	passkey2 := NewTestPasskey(user.ID, "Security Key")
-	user.Passkeys = []Passkey{passkey1, passkey2}
-	require.NoError(t, connector.storage.SaveUser(ctx, user))
+	user.Passkeys = []Passkey{*passkey1.ToPasskey(), *passkey2.ToPasskey()}
+	require.NoError(t, connector.storage.CreateUser(ctx, user))
 
 	t.Run("list passkeys", func(t *testing.T) {
 		resp, err := server.ListPasskeys(ctx, &api.ListPasskeysReq{
@@ -359,10 +361,11 @@ func TestGRPCServer_RenamePasskey(t *testing.T) {
 	ctx := TestContext(t)
 
 	// Create test user with passkey
-	user := NewTestUser("alice@example.com")
+	testUser := NewTestUser("alice@example.com")
+	user := testUser.ToUser()
 	passkey := NewTestPasskey(user.ID, "Old Name")
-	user.Passkeys = []Passkey{passkey}
-	require.NoError(t, connector.storage.SaveUser(ctx, user))
+	user.Passkeys = []Passkey{*passkey.ToPasskey()}
+	require.NoError(t, connector.storage.CreateUser(ctx, user))
 
 	t.Run("rename passkey", func(t *testing.T) {
 		resp, err := server.RenamePasskey(ctx, &api.RenamePasskeyReq{
@@ -399,11 +402,12 @@ func TestGRPCServer_DeletePasskey(t *testing.T) {
 	ctx := TestContext(t)
 
 	// Create test user with passkeys
-	user := NewTestUser("alice@example.com")
+	testUser := NewTestUser("alice@example.com")
+	user := testUser.ToUser()
 	passkey1 := NewTestPasskey(user.ID, "Key 1")
 	passkey2 := NewTestPasskey(user.ID, "Key 2")
-	user.Passkeys = []Passkey{passkey1, passkey2}
-	require.NoError(t, connector.storage.SaveUser(ctx, user))
+	user.Passkeys = []Passkey{*passkey1.ToPasskey(), *passkey2.ToPasskey()}
+	require.NoError(t, connector.storage.CreateUser(ctx, user))
 
 	t.Run("delete passkey", func(t *testing.T) {
 		resp, err := server.DeletePasskey(ctx, &api.DeletePasskeyReq{
@@ -439,12 +443,13 @@ func TestGRPCServer_GetAuthMethods(t *testing.T) {
 	ctx := TestContext(t)
 
 	// Create test user with multiple auth methods
-	user := NewTestUser("alice@example.com")
+	testUser := NewTestUser("alice@example.com")
+	user := testUser.ToUser()
 	require.NoError(t, connector.SetPassword(ctx, user, "SecurePass123"))
 	passkey := NewTestPasskey(user.ID, "Test Key")
-	user.Passkeys = []Passkey{passkey}
+	user.Passkeys = []Passkey{*passkey.ToPasskey()}
 	user.TOTPEnabled = true
-	require.NoError(t, connector.storage.SaveUser(ctx, user))
+	require.NoError(t, connector.storage.CreateUser(ctx, user))
 
 	t.Run("get auth methods", func(t *testing.T) {
 		resp, err := server.GetAuthMethods(ctx, &api.GetAuthMethodsReq{
@@ -500,24 +505,29 @@ func TestGRPCServer_Concurrent(t *testing.T) {
 
 // NewTestConnector creates a connector for testing (helper function).
 func NewTestConnector(t *testing.T, config *Config) *Connector {
-	storage := NewFileStorage(config.DataDir, TestLogger(t))
+	storage, err := NewFileStorage(config.DataDir)
+	require.NoError(t, err)
 	connector := &Connector{
 		config:  config,
 		storage: storage,
 		logger:  TestLogger(t),
 	}
 	// Initialize rate limiters
-	connector.totpRateLimiter = NewTOTPRateLimiter()
+	connector.totpRateLimiter = NewTOTPRateLimiter(5, 5*time.Minute)
 	connector.magicLinkRateLimiter = NewMagicLinkRateLimiter(
 		config.MagicLink.RateLimit.PerHour,
 		config.MagicLink.RateLimit.PerDay,
 	)
 
-	// Start cleanup goroutine
-	go connector.CleanupExpiredSessions(context.Background(), time.Minute)
+	// Start cleanup goroutine (on storage)
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			_ = storage.CleanupExpiredSessions(context.Background())
+			_ = storage.CleanupExpiredTokens(context.Background())
+		}
+	}()
 
 	return connector
 }
-
-// fmt import helper
-import "fmt"
