@@ -3,7 +3,7 @@
 **Project**: Dex Fork with Enhanced Local Connector
 **Repository**: enopax/dex
 **Branch**: `feature/passkeys` (implementation), `main` (upstream-compatible)
-**Last Updated**: 2025-11-18 (Phase 2 Week 7 completed - OAuth integration implemented)
+**Last Updated**: 2025-11-18 (Phase 7 Week 13 - TOTP handler tests implemented, coverage 73.1%)
 
 ---
 
@@ -2661,11 +2661,11 @@ golangci-lint run
 
 ## Test Coverage Improvements (2025-11-18)
 
-**Status**: ✅ COMPLETE - Week 13 storage tests implemented, gRPC tests fixed
+**Status**: 🚧 IN PROGRESS - Week 13 storage tests complete, TOTP handler tests complete
 
 ### Achievements
 
-**Overall Coverage**: 68.8% (improved from 68.5% - incremental improvement, total increase from 62.6% is 6.2 percentage points)
+**Overall Coverage**: 73.1% (improved from 68.8% - a 4.3 percentage point increase, total increase from 62.6% is 10.5 percentage points)
 
 **Tests Fixed**:
 - ✅ All 12 gRPC test functions now passing (fixed user creation validation, RemovePassword setup, EnableTOTP user creation)
@@ -2723,6 +2723,11 @@ golangci-lint run
 - TestDeleteAuthSetupToken (3 test cases: removal, idempotent, subsequent Get)
 - TestCleanupExpiredAuthSetupTokens (3 test cases: removal, preservation, concurrent)
 
+**TOTP Handler Tests**: 3/3 test functions passing ✅ (NEW - 2025-11-18)
+- TestHandleTOTPEnable (6 test cases: valid user, missing user_id, user not found, TOTP already enabled, concurrent requests, invalid JSON)
+- TestHandleTOTPVerify (6 test cases: valid code enables TOTP, invalid code, missing fields (4 sub-tests), user not found)
+- TestHandleTOTPValidate (7 test cases: valid TOTP code, invalid code, backup code fallback with marking as used, rate limiting, user without TOTP, missing user_id, missing code)
+
 **Still Failing** (not critical - deferred to handler adjustments):
 - TestHandle2FAPrompt (template rendering, status code differences)
 - TestHandle2FAVerifyTOTP (HTTP 303 vs expected 302/401)
@@ -2736,25 +2741,27 @@ These failing tests are structural issues with test assertions expecting differe
 **Comprehensive Coverage Report**: See `docs/enhancements/coverage-analysis.md` for detailed analysis
 
 **Summary**:
-- **Current Coverage**: 68.8% (4,883/7,093 statements)
-- **Target**: >80% (+11.2 percentage points needed)
-- **Critical Gaps**: TOTP handlers (0%), Magic link handlers (0%), gRPC TOTP endpoints (0%)
+- **Current Coverage**: 73.1% (5,186/7,093 statements)
+- **Target**: >80% (+6.9 percentage points needed)
+- **Critical Gaps**: Magic link handlers (0%), gRPC TOTP endpoints (0%)
 
 **Improvement Plan**:
 - **Phase 1** (1-2 days): Test TOTP/Magic handlers → +6-8% → Target 75-77%
+  - ✅ TOTP handlers complete (+4.3%) - 2025-11-18
+  - 🚧 Magic link handlers pending
 - **Phase 2** (2-3 days): Integration tests → +3-5% → Target 78-82%
 - **Phase 3** (optional): Browser tests → +2-3% → Target 80-85%
 
-**Next Priority**: Implement Phase 1 - TOTP and Magic Link handler tests
+**Next Priority**: Implement Magic Link handler tests (Phase 1 completion)
 
 **Coverage by Component**:
 - ✅ OAuth Integration: 100%
 - ✅ Storage Operations: 80-100%
 - ✅ Validation Functions: 84-100%
 - ✅ TOTP Core Logic: 90-100%
+- ✅ TOTP HTTP Handlers: 80%+ ✅ NEW (2025-11-18)
 - ✅ 2FA Policy Enforcement: 85%+
 - ✅ Magic Link Core Logic: 75-100%
-- ❌ TOTP HTTP Handlers: 0%
 - ❌ Magic Link HTTP Handlers: 0%
 - ❌ gRPC TOTP Endpoints: 0%
 - ⚠️ Passkey Finish Flows: 18.5%, 12.8%

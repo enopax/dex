@@ -1201,9 +1201,9 @@ type AuthSetupToken struct {
 
 ### Week 13: Comprehensive Testing (IN PROGRESS - 2025-11-18)
 
-**Status**: 🚧 IN PROGRESS - Storage tests complete, WebAuthn/TOTP/MagicLink already tested
+**Status**: 🚧 IN PROGRESS - Storage tests complete, TOTP handler tests complete (2025-11-18)
 
-**Current Coverage**: 68.8% (improved from 68.5%)
+**Current Coverage**: 73.1% (improved from 68.8% - a 4.3 percentage point increase)
 
 #### Unit Tests
 - [x] Test storage operations - COMPLETE (2025-11-18)
@@ -1232,28 +1232,33 @@ type AuthSetupToken struct {
     - Phase 3 (optional): Browser tests → +2-3% → Target 80-85%
   - **Next Task**: Implement Phase 1 - TOTP and Magic Link handler tests
 
-#### Coverage Improvement Phase 1 (Target: 75-77%)
+#### Coverage Improvement Phase 1 (Target: 75-77%) - IN PROGRESS (2025-11-18)
 
 **Goal**: Test previously untested TOTP and Magic Link handlers to gain +6-8% coverage
 
-- [ ] Create `handlers_totp_test.go` with comprehensive TOTP handler tests:
-  - [ ] Test `handleTOTPEnable` (0% → 80%+)
-    - Valid user → returns secret, QR code, backup codes
-    - Missing user_id → returns 400
-    - User not found → returns 404
-    - TOTP already enabled → returns 409
-    - Concurrent requests
-  - [ ] Test `handleTOTPVerify` (0% → 80%+)
-    - Valid TOTP code → enables TOTP, stores backup codes
-    - Invalid code → returns error
-    - Missing fields → returns 400
-    - User not found → returns 404
-  - [ ] Test `handleTOTPValidate` (0% → 80%+)
-    - Valid TOTP code → returns success
-    - Invalid code → returns error
-    - Backup code fallback → marks code as used
-    - Rate limiting enforced
-    - User without TOTP → returns error
+**Status**: ✅ TOTP handlers complete (coverage improved from 68.8% to 73.1% - a 4.3 percentage point increase)
+
+- [x] Create `handlers_totp_test.go` with comprehensive TOTP handler tests: ✅ COMPLETE (2025-11-18)
+  - [x] Test `handleTOTPEnable` (0% → 80%+) - All 6 test cases passing
+    - Valid user → returns secret, QR code, backup codes ✅
+    - Missing user_id → returns 400 ✅
+    - User not found → returns 404 ✅
+    - TOTP already enabled → returns 409 ✅
+    - Concurrent requests ✅
+    - Invalid JSON → returns 400 ✅
+  - [x] Test `handleTOTPVerify` (0% → 80%+) - All 6 test cases passing
+    - Valid TOTP code → enables TOTP, stores backup codes ✅
+    - Invalid code → returns error ✅
+    - Missing fields → returns 400 (4 sub-tests) ✅
+    - User not found → returns 404 ✅
+  - [x] Test `handleTOTPValidate` (0% → 80%+) - All 7 test cases passing
+    - Valid TOTP code → returns success ✅
+    - Invalid code → returns error ✅
+    - Backup code fallback → marks code as used ✅
+    - Rate limiting enforced ✅
+    - User without TOTP → returns error ✅
+    - Missing user_id → returns 400 ✅
+    - Missing code → returns 400 ✅
 
 - [ ] Create `handlers_magiclink_test.go` with comprehensive magic link handler tests:
   - [ ] Test `handleMagicLinkSend` (0% → 80%+)
