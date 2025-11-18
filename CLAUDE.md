@@ -112,7 +112,9 @@ make build
 |------|---------|--------------|
 | **CLAUDE.md** (this file) | AI assistant guide, workflows, coding standards | Start here for overview |
 | **DEVELOPMENT.md** | Development environment setup, building, testing | Before writing code |
+| **CODING_STANDARDS.md** | Coding conventions, best practices, security guidelines | Before writing code |
 | **TODO.md** | Implementation task list and timeline | Before starting a task |
+| **CHANGELOG.md** | Project change history and release notes | When updating code |
 | **README.md** | Upstream Dex documentation | Understanding Dex basics |
 | **docs/enhancements/passkey-webauthn-support.md** | Passkey concept and architecture | Before implementing passkeys |
 
@@ -866,6 +868,8 @@ tail -f /var/log/dex.log
 - [ ] Logging added
 - [ ] Security reviewed (no secrets logged, input validated)
 - [ ] TODO.md updated (task marked `[x]`)
+- [ ] CHANGELOG.md updated (change documented)
+- [ ] Follows CODING_STANDARDS.md guidelines
 - [ ] Changes committed with semantic message
 - [ ] Changes pushed to remote
 
@@ -889,6 +893,9 @@ tail -f /var/log/dex.log
 - go-otp: https://github.com/pquerna/otp
 
 **Enopax Docs**:
+- Development Guide: `DEVELOPMENT.md`
+- Coding Standards: `CODING_STANDARDS.md`
+- Changelog: `CHANGELOG.md`
 - Passkey Concept: `docs/enhancements/passkey-webauthn-support.md`
 - Implementation Plan: `TODO.md`
 
@@ -900,6 +907,9 @@ tail -f /var/log/dex.log
 
 | What | Where |
 |------|-------|
+| Dev guide | `DEVELOPMENT.md` |
+| Coding standards | `CODING_STANDARDS.md` |
+| Changelog | `CHANGELOG.md` |
 | Task list | `TODO.md` |
 | Concept doc | `docs/enhancements/passkey-webauthn-support.md` |
 | Connector code | `connector/local-enhanced/` (to be created) |
@@ -929,6 +939,6 @@ golangci-lint run
 
 ---
 
-**Last Updated**: 2025-11-17
-**Version**: 1.0
+**Last Updated**: 2025-11-18
+**Version**: 1.1
 **Maintainer**: Enopax Platform Team
