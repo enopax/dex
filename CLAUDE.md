@@ -2661,11 +2661,11 @@ golangci-lint run
 
 ## Test Coverage Improvements (2025-11-18)
 
-**Status**: ✅ PHASE 1 COMPLETE - Week 13 storage tests complete, TOTP handler tests complete, Magic link handler tests complete
+**Status**: ✅ WEEK 13 COMPLETE - Storage tests complete, TOTP handler tests complete, Magic link handler tests complete, gRPC TOTP endpoint tests complete
 
 ### Achievements
 
-**Overall Coverage**: 77.0% (improved from 73.1% - a 3.9 percentage point increase, total increase from 62.6% is 14.4 percentage points)
+**Overall Coverage**: 79.0% (improved from 73.1% - a 5.9 percentage point increase, total increase from 62.6% is 16.4 percentage points)
 
 **Tests Fixed**:
 - ✅ All 12 gRPC test functions now passing (fixed user creation validation, RemovePassword setup, EnableTOTP user creation)
@@ -2770,19 +2770,50 @@ These failing tests are structural issues with test assertions expecting differe
 - ✅ 2FA Policy Enforcement: 85%+
 - ✅ Magic Link Core Logic: 75-100%
 - ✅ Magic Link HTTP Handlers: 91-98% ✅ COMPLETE (2025-11-18 Session 2)
-- ❌ gRPC TOTP Endpoints: 0% (VerifyTOTPSetup, DisableTOTP, GetTOTPInfo, RegenerateBackupCodes)
+- ✅ gRPC TOTP Endpoints: 100% ✅ COMPLETE (2025-11-18 Session 3)
+  - ✅ `VerifyTOTPSetup` - 4 test cases (successful setup, invalid code, user not found, missing fields)
+  - ✅ `DisableTOTP` - 3 test cases (successful disable, invalid code, user not found)
+  - ✅ `GetTOTPInfo` - 3 test cases (with TOTP enabled, without TOTP, user not found)
+  - ✅ `RegenerateBackupCodes` - 3 test cases (successful regeneration, invalid code, user not found)
 - ⚠️ Passkey Finish Flows: 18.5%, 12.8% (requires browser/virtual authenticator)
 
 **Acceptable Low Coverage**:
 - Passkey finish functions (18.5%, 12.8%) - Session validation tested, cryptographic verification handled by go-webauthn library, full testing requires browser/virtual authenticator
 
+### gRPC TOTP Endpoint Tests (2025-11-18 Session 3)
+
+**Test File**: `connector/local-enhanced/grpc_test.go` (4 new test functions added)
+
+**Test Results**:
+- `TestGRPCServer_VerifyTOTPSetup`: 4/4 passing ✅
+  - Successful TOTP setup verification
+  - Invalid TOTP code handling
+  - User not found error
+  - Missing required fields validation
+- `TestGRPCServer_DisableTOTP`: 3/3 passing ✅
+  - Successful TOTP disable with valid code
+  - Invalid TOTP code rejection
+  - User not found error
+- `TestGRPCServer_GetTOTPInfo`: 3/3 passing ✅
+  - Get TOTP status for enabled user
+  - Get TOTP status for user without TOTP
+  - User not found error
+- `TestGRPCServer_RegenerateBackupCodes`: 3/3 passing ✅
+  - Successful backup code regeneration
+  - Invalid TOTP code rejection
+  - User not found error
+
+**Coverage Impact**: +2.0% (from 77.0% to 79.0%)
+
+**Total gRPC Tests**: 16 test functions, all passing ✅
+
 ### Next Steps
 
-- [ ] Implement Phase 1 tests: TOTP and Magic Link handlers (see `docs/enhancements/coverage-analysis.md`)
 - [ ] Fix 2FA handler test assertions to match actual handler behavior (HTTP 303 See Other redirects)
 - [ ] Implement template rendering for auth setup flow
 - [ ] Browser testing with virtual authenticator (Chrome DevTools)
 - [ ] Cross-browser compatibility testing
+- [ ] Integration tests for complete flows (optional - would bring coverage to ~82%)
 
 ---
 

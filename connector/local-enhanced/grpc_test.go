@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/dexidp/dex/api/v2"
+	"github.com/pquerna/otp/totp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -480,6 +481,324 @@ func TestGRPCServer_GetAuthMethods(t *testing.T) {
 	t.Run("user not found", func(t *testing.T) {
 		resp, err := server.GetAuthMethods(ctx, &api.GetAuthMethodsReq{
 			UserId: "nonexistent",
+		})
+		require.NoError(t, err)
+		assert.True(t, resp.NotFound)
+	})
+}
+
+func TestGRPCServer_VerifyTOTPSetup(t *testing.T) {
+	config := DefaultTestConfig(t)
+	defer CleanupTestStorage(t, config.DataDir)
+
+	connector := NewTestConnector(t, config)
+	server := NewGRPCServer(connector)
+	ctx := TestContext(t)
+
+	// Create test user
+	user := NewTestUser("alice@example.com")
+	require.NoError(t, connector.storage.CreateUser(ctx, user.ToUser()))
+
+	// Enable TOTP to get secret and backup codes
+	enableResp, err := server.EnableTOTP(ctx, &api.EnableTOTPReq{
+		UserId: user.ID,
+	})
+	require.NoError(t, err)
+	require.False(t, enableResp.NotFound)
+
+	// Generate valid TOTP code
+	validCode, err := totp.GenerateCode(enableResp.Secret, time.Now())
+	require.NoError(t, err)
+
+	t.Run("successful TOTP setup", func(t *testing.T) {
+		resp, err := server.VerifyTOTPSetup(ctx, &api.VerifyTOTPSetupReq{
+			UserId:      user.ID,
+			Secret:      enableResp.Secret,
+			Code:        validCode,
+			BackupCodes: enableResp.BackupCodes,
+		})
+		require.NoError(t, err)
+		assert.False(t, resp.NotFound)
+		assert.False(t, resp.InvalidCode)
+
+		// Verify TOTP is now enabled
+		updated, err := connector.storage.GetUser(ctx, user.ID)
+		require.NoError(t, err)
+		assert.True(t, updated.TOTPEnabled)
+		assert.NotNil(t, updated.TOTPSecret)
+		assert.Len(t, updated.BackupCodes, 10)
+	})
+
+	t.Run("invalid TOTP code", func(t *testing.T) {
+		// Create another user
+		user2 := NewTestUser("bob@example.com")
+		require.NoError(t, connector.storage.CreateUser(ctx, user2.ToUser()))
+
+		enableResp2, err := server.EnableTOTP(ctx, &api.EnableTOTPReq{
+			UserId: user2.ID,
+		})
+		require.NoError(t, err)
+
+		resp, err := server.VerifyTOTPSetup(ctx, &api.VerifyTOTPSetupReq{
+			UserId:      user2.ID,
+			Secret:      enableResp2.Secret,
+			Code:        "000000", // Invalid code
+			BackupCodes: enableResp2.BackupCodes,
+		})
+		require.NoError(t, err)
+		assert.True(t, resp.InvalidCode)
+	})
+
+	t.Run("user not found", func(t *testing.T) {
+		resp, err := server.VerifyTOTPSetup(ctx, &api.VerifyTOTPSetupReq{
+			UserId:      "nonexistent",
+			Secret:      "secret",
+			Code:        "123456",
+			BackupCodes: []string{"CODE1234"},
+		})
+		require.NoError(t, err)
+		assert.True(t, resp.NotFound)
+	})
+
+	t.Run("missing required fields", func(t *testing.T) {
+		_, err := server.VerifyTOTPSetup(ctx, &api.VerifyTOTPSetupReq{
+			UserId: user.ID,
+			// Missing secret and code
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "secret is required")
+	})
+}
+
+func TestGRPCServer_DisableTOTP(t *testing.T) {
+	config := DefaultTestConfig(t)
+	defer CleanupTestStorage(t, config.DataDir)
+
+	connector := NewTestConnector(t, config)
+	server := NewGRPCServer(connector)
+	ctx := TestContext(t)
+
+	// Create test user with TOTP enabled
+	user := NewTestUser("alice@example.com")
+	require.NoError(t, connector.storage.CreateUser(ctx, user.ToUser()))
+
+	// Enable TOTP
+	enableResp, err := server.EnableTOTP(ctx, &api.EnableTOTPReq{
+		UserId: user.ID,
+	})
+	require.NoError(t, err)
+
+	validCode, err := totp.GenerateCode(enableResp.Secret, time.Now())
+	require.NoError(t, err)
+
+	_, err = server.VerifyTOTPSetup(ctx, &api.VerifyTOTPSetupReq{
+		UserId:      user.ID,
+		Secret:      enableResp.Secret,
+		Code:        validCode,
+		BackupCodes: enableResp.BackupCodes,
+	})
+	require.NoError(t, err)
+
+	t.Run("successful TOTP disable", func(t *testing.T) {
+		// Reload user to get updated TOTP secret
+		user, err := connector.storage.GetUser(ctx, user.ID)
+		require.NoError(t, err)
+		require.NotNil(t, user.TOTPSecret)
+
+		// Generate new valid code for disabling
+		disableCode, err := totp.GenerateCode(*user.TOTPSecret, time.Now())
+		require.NoError(t, err)
+
+		resp, err := server.DisableTOTP(ctx, &api.DisableTOTPReq{
+			UserId: user.ID,
+			Code:   disableCode,
+		})
+		require.NoError(t, err)
+		assert.False(t, resp.NotFound)
+		assert.False(t, resp.InvalidCode)
+
+		// Verify TOTP is now disabled
+		updated, err := connector.storage.GetUser(ctx, user.ID)
+		require.NoError(t, err)
+		assert.False(t, updated.TOTPEnabled)
+		assert.Nil(t, updated.TOTPSecret)
+	})
+
+	t.Run("invalid TOTP code", func(t *testing.T) {
+		// Create another user with TOTP
+		user2 := NewTestUser("bob@example.com")
+		require.NoError(t, connector.storage.CreateUser(ctx, user2.ToUser()))
+
+		enableResp2, err := server.EnableTOTP(ctx, &api.EnableTOTPReq{
+			UserId: user2.ID,
+		})
+		require.NoError(t, err)
+
+		validCode2, err := totp.GenerateCode(enableResp2.Secret, time.Now())
+		require.NoError(t, err)
+
+		_, err = server.VerifyTOTPSetup(ctx, &api.VerifyTOTPSetupReq{
+			UserId:      user2.ID,
+			Secret:      enableResp2.Secret,
+			Code:        validCode2,
+			BackupCodes: enableResp2.BackupCodes,
+		})
+		require.NoError(t, err)
+
+		resp, err := server.DisableTOTP(ctx, &api.DisableTOTPReq{
+			UserId: user2.ID,
+			Code:   "000000", // Invalid code
+		})
+		require.NoError(t, err)
+		assert.True(t, resp.InvalidCode)
+	})
+
+	t.Run("user not found", func(t *testing.T) {
+		resp, err := server.DisableTOTP(ctx, &api.DisableTOTPReq{
+			UserId: "nonexistent",
+			Code:   "123456",
+		})
+		require.NoError(t, err)
+		assert.True(t, resp.NotFound)
+	})
+}
+
+func TestGRPCServer_GetTOTPInfo(t *testing.T) {
+	config := DefaultTestConfig(t)
+	defer CleanupTestStorage(t, config.DataDir)
+
+	connector := NewTestConnector(t, config)
+	server := NewGRPCServer(connector)
+	ctx := TestContext(t)
+
+	// Create test user with TOTP enabled
+	user := NewTestUser("alice@example.com")
+	require.NoError(t, connector.storage.CreateUser(ctx, user.ToUser()))
+
+	// Enable TOTP
+	enableResp, err := server.EnableTOTP(ctx, &api.EnableTOTPReq{
+		UserId: user.ID,
+	})
+	require.NoError(t, err)
+
+	validCode, err := totp.GenerateCode(enableResp.Secret, time.Now())
+	require.NoError(t, err)
+
+	_, err = server.VerifyTOTPSetup(ctx, &api.VerifyTOTPSetupReq{
+		UserId:      user.ID,
+		Secret:      enableResp.Secret,
+		Code:        validCode,
+		BackupCodes: enableResp.BackupCodes,
+	})
+	require.NoError(t, err)
+
+	t.Run("get TOTP info", func(t *testing.T) {
+		resp, err := server.GetTOTPInfo(ctx, &api.GetTOTPInfoReq{
+			UserId: user.ID,
+		})
+		require.NoError(t, err)
+		assert.False(t, resp.NotFound)
+		assert.NotNil(t, resp.TotpInfo)
+		assert.True(t, resp.TotpInfo.Enabled)
+		assert.Equal(t, int32(10), resp.TotpInfo.BackupCodesRemaining)
+	})
+
+	t.Run("TOTP not enabled", func(t *testing.T) {
+		// Create user without TOTP
+		user2 := NewTestUser("bob@example.com")
+		require.NoError(t, connector.storage.CreateUser(ctx, user2.ToUser()))
+
+		resp, err := server.GetTOTPInfo(ctx, &api.GetTOTPInfoReq{
+			UserId: user2.ID,
+		})
+		require.NoError(t, err)
+		assert.False(t, resp.NotFound)
+		assert.NotNil(t, resp.TotpInfo)
+		assert.False(t, resp.TotpInfo.Enabled)
+		assert.Equal(t, int32(0), resp.TotpInfo.BackupCodesRemaining)
+	})
+
+	t.Run("user not found", func(t *testing.T) {
+		resp, err := server.GetTOTPInfo(ctx, &api.GetTOTPInfoReq{
+			UserId: "nonexistent",
+		})
+		require.NoError(t, err)
+		assert.True(t, resp.NotFound)
+	})
+}
+
+func TestGRPCServer_RegenerateBackupCodes(t *testing.T) {
+	config := DefaultTestConfig(t)
+	defer CleanupTestStorage(t, config.DataDir)
+
+	connector := NewTestConnector(t, config)
+	server := NewGRPCServer(connector)
+	ctx := TestContext(t)
+
+	// Create test user with TOTP enabled
+	user := NewTestUser("alice@example.com")
+	require.NoError(t, connector.storage.CreateUser(ctx, user.ToUser()))
+
+	// Enable TOTP
+	enableResp, err := server.EnableTOTP(ctx, &api.EnableTOTPReq{
+		UserId: user.ID,
+	})
+	require.NoError(t, err)
+
+	validCode, err := totp.GenerateCode(enableResp.Secret, time.Now())
+	require.NoError(t, err)
+
+	_, err = server.VerifyTOTPSetup(ctx, &api.VerifyTOTPSetupReq{
+		UserId:      user.ID,
+		Secret:      enableResp.Secret,
+		Code:        validCode,
+		BackupCodes: enableResp.BackupCodes,
+	})
+	require.NoError(t, err)
+
+	t.Run("successful regeneration", func(t *testing.T) {
+		// Reload user to get updated TOTP secret
+		user, err := connector.storage.GetUser(ctx, user.ID)
+		require.NoError(t, err)
+		require.NotNil(t, user.TOTPSecret)
+
+		// Generate new valid code for regeneration
+		regenCode, err := totp.GenerateCode(*user.TOTPSecret, time.Now())
+		require.NoError(t, err)
+
+		resp, err := server.RegenerateBackupCodes(ctx, &api.RegenerateBackupCodesReq{
+			UserId: user.ID,
+			Code:   regenCode,
+		})
+		require.NoError(t, err)
+		assert.False(t, resp.NotFound)
+		assert.False(t, resp.InvalidCode)
+		assert.Len(t, resp.BackupCodes, 10)
+
+		// Verify new backup codes are different
+		for _, oldCode := range enableResp.BackupCodes {
+			assert.NotContains(t, resp.BackupCodes, oldCode)
+		}
+
+		// Verify backup codes are stored
+		updated, err := connector.storage.GetUser(ctx, user.ID)
+		require.NoError(t, err)
+		assert.Len(t, updated.BackupCodes, 10)
+	})
+
+	t.Run("invalid TOTP code", func(t *testing.T) {
+		resp, err := server.RegenerateBackupCodes(ctx, &api.RegenerateBackupCodesReq{
+			UserId: user.ID,
+			Code:   "000000", // Invalid code
+		})
+		require.NoError(t, err)
+		assert.True(t, resp.InvalidCode)
+	})
+
+	t.Run("user not found", func(t *testing.T) {
+		resp, err := server.RegenerateBackupCodes(ctx, &api.RegenerateBackupCodesReq{
+			UserId: "nonexistent",
+			Code:   "123456",
 		})
 		require.NoError(t, err)
 		assert.True(t, resp.NotFound)
