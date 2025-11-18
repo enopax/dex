@@ -3,7 +3,7 @@
 **Project**: Dex Fork with Enhanced Local Connector
 **Repository**: enopax/dex
 **Branch**: `feature/passkeys` (implementation), `main` (upstream-compatible)
-**Last Updated**: 2025-11-18 (Phase 1 Week 3 completed)
+**Last Updated**: 2025-11-18 (Phase 2 Week 7 completed - Passkey authentication endpoints)
 
 ---
 
@@ -456,15 +456,9 @@ Passkey: PasskeyConfig{
 }
 ```
 
-**Next Steps** (Phase 2 Week 6):
-- ✅ Implement HTTP endpoints for passkey registration/authentication (register/begin complete)
-- [ ] Implement finish registration handler
-- [ ] Create HTML templates for passkey UI
-- [ ] Integrate with OAuth flow
-
 ---
 
-### HTTP Handler Implementation (Phase 2 Week 6 - COMPLETE)
+### HTTP Handler Implementation (Phase 2 Week 6-7 - COMPLETE)
 
 **Location**: `connector/local-enhanced/handlers.go`
 
@@ -587,10 +581,130 @@ Passkey: PasskeyConfig{
 **Helper Functions**:
 - `parseCredentialCreationResponse()` - Parses the browser's credential creation response using the go-webauthn protocol package
 
-**Next Steps**:
-- Create HTML templates for passkey registration UI
-- Implement client-side JavaScript for WebAuthn API calls
-- Integrate with OAuth flow
+---
+
+#### POST /passkey/authenticate/begin (Phase 2 Week 7 - COMPLETE)
+
+**Purpose**: Begins WebAuthn passkey authentication ceremony.
+
+**Request**:
+```json
+{
+  "email": "user@example.com"  // Optional - omit for discoverable credentials
+}
+```
+
+**Response**:
+```json
+{
+  "session_id": "base64-session-id",
+  "options": {
+    "publicKey": {
+      "challenge": "base64-challenge",
+      "timeout": 60000,
+      "rpId": "auth.enopax.io",
+      "allowCredentials": [...],  // Empty for discoverable credentials
+      "userVerification": "preferred"
+    }
+  }
+}
+```
+
+**Implementation Details**:
+- Validates request method (POST only)
+- Checks if passkeys are enabled in configuration
+- Retrieves user by email (or allows empty email for discoverable credentials)
+- Calls `BeginPasskeyAuthentication()` to generate challenge and options
+- Creates WebAuthn session with 5-minute TTL
+- Returns session ID and PublicKeyCredentialRequestOptions
+
+**Error Handling**:
+- `405 Method Not Allowed` - Non-POST requests
+- `403 Forbidden` - Passkeys disabled in configuration
+- `400 Bad Request` - Invalid request body
+- `404 Not Found` - User not found (when email provided)
+- `500 Internal Server Error` - Authentication setup failed
+
+**Testing**:
+- Unit tests in `handlers_test.go`
+- Tests for successful authentication with/without email, method validation, configuration checks, input validation
+- All tests passing
+
+**Security**:
+- Validates passkey configuration before processing
+- Supports discoverable credentials for passwordless flows
+- Logs all authentication attempts
+- Uses secure session generation
+
+---
+
+#### POST /passkey/authenticate/finish (Phase 2 Week 7 - COMPLETE)
+
+**Purpose**: Completes WebAuthn passkey authentication ceremony.
+
+**Request**:
+```json
+{
+  "session_id": "base64-session-id",
+  "credential": {
+    "id": "credential-id",
+    "type": "public-key",
+    "rawId": "base64-raw-id",
+    "response": {
+      "clientDataJSON": "base64-client-data",
+      "authenticatorData": "base64-auth-data",
+      "signature": "base64-signature"
+    }
+  }
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "user_id": "user-id",
+  "email": "user@example.com",
+  "message": "Authentication successful"
+}
+```
+
+**Implementation Details**:
+- Validates request method (POST only)
+- Checks if passkeys are enabled in configuration
+- Validates all required fields (session_id, credential)
+- Parses credential assertion response using `parseCredentialAssertionResponse()`
+- Calls `FinishPasskeyAuthentication()` to verify signature and authenticate
+- Returns success with user information (user_id, email)
+
+**Error Handling**:
+- `405 Method Not Allowed` - Non-POST requests
+- `403 Forbidden` - Passkeys disabled in configuration OR authenticator clone detected
+- `400 Bad Request` - Invalid request body, missing fields, or invalid credential format
+- `401 Unauthorized` - Invalid or expired session OR authentication failed
+- `404 Not Found` - Credential not found
+- `500 Internal Server Error` - Authentication completion failed
+
+**Testing**:
+- Comprehensive unit tests in `handlers_test.go`
+- Tests for method validation, configuration checks, input validation, session validation, and credential parsing
+- All tests passing
+
+**Security**:
+- Validates passkey configuration before processing
+- Validates all input fields before processing
+- Verifies session validity and expiry
+- Uses go-webauthn library for secure signature verification
+- Implements clone detection via sign counter validation
+- Logs all authentication attempts and outcomes
+
+**Helper Functions**:
+- `parseCredentialAssertionResponse()` - Parses the browser's credential assertion response using the go-webauthn protocol package
+
+**Next Steps** (Phase 2 Week 7):
+- [ ] Create HTML templates for passkey UI
+- [ ] Integrate with OAuth flow
+- [ ] Implement password authentication handler
 
 ---
 

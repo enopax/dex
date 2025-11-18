@@ -22,16 +22,228 @@ func (c *Connector) handlePasswordLogin(w http.ResponseWriter, r *http.Request) 
 	http.Error(w, "Not implemented", http.StatusNotImplemented)
 }
 
+// PasskeyAuthenticateBeginRequest represents the request body for beginning passkey authentication.
+type PasskeyAuthenticateBeginRequest struct {
+	// Email is the email address of the user (optional for discoverable credentials)
+	Email string `json:"email,omitempty"`
+}
+
+// PasskeyAuthenticateBeginResponse represents the response from beginning passkey authentication.
+type PasskeyAuthenticateBeginResponse struct {
+	// SessionID is the session identifier to be used in the finish call
+	SessionID string `json:"session_id"`
+
+	// Options contains the PublicKeyCredentialRequestOptions to be passed
+	// to navigator.credentials.get() in the browser
+	Options interface{} `json:"options"`
+}
+
 // handlePasskeyLoginBegin begins passkey authentication.
+//
+// This endpoint:
+// 1. Validates the request and checks if passkeys are enabled
+// 2. Retrieves the user by email (or allows discoverable credentials if no email provided)
+// 3. Calls BeginPasskeyAuthentication to generate challenge and options
+// 4. Creates a WebAuthn session with 5-minute TTL
+// 5. Returns the session ID and PublicKeyCredentialRequestOptions
+//
+// Request body:
+//
+//	{
+//	  "email": "user@example.com"  // Optional - omit for discoverable credentials
+//	}
+//
+// Response:
+//
+//	{
+//	  "session_id": "base64-session-id",
+//	  "options": {
+//	    "publicKey": {
+//	      "challenge": "base64-challenge",
+//	      "timeout": 60000,
+//	      "rpId": "auth.enopax.io",
+//	      "allowCredentials": [...],  // Empty for discoverable credentials
+//	      "userVerification": "preferred"
+//	    }
+//	  }
+//	}
 func (c *Connector) handlePasskeyLoginBegin(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement in Phase 2 Week 7
-	http.Error(w, "Not implemented", http.StatusNotImplemented)
+	// Only accept POST requests
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Check if passkeys are enabled
+	if !c.config.Passkey.Enabled {
+		c.logger.Warn("passkey authentication attempted but passkeys are disabled")
+		http.Error(w, "Passkeys are not enabled", http.StatusForbidden)
+		return
+	}
+
+	// Parse request body
+	var req PasskeyAuthenticateBeginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		c.logger.Errorf("failed to parse request body: %v", err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Begin passkey authentication (email is optional for discoverable credentials)
+	ctx := r.Context()
+	session, options, err := c.BeginPasskeyAuthentication(ctx, req.Email)
+	if err != nil {
+		c.logger.Errorf("failed to begin passkey authentication: %v", err)
+
+		// Provide more specific error messages
+		if err.Error() == "user not found: user not found" {
+			http.Error(w, "User not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Failed to begin authentication", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Prepare response
+	resp := PasskeyAuthenticateBeginResponse{
+		SessionID: session.SessionID,
+		Options:   options,
+	}
+
+	// Send response
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		c.logger.Errorf("failed to encode response: %v", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
+
+	c.logger.Infof("passkey authentication begin successful (session: %s)", session.SessionID)
+}
+
+// PasskeyAuthenticateFinishRequest represents the request body for completing passkey authentication.
+type PasskeyAuthenticateFinishRequest struct {
+	// SessionID is the session identifier from the begin call
+	SessionID string `json:"session_id"`
+
+	// Credential contains the credential assertion response from navigator.credentials.get()
+	Credential json.RawMessage `json:"credential"`
+}
+
+// PasskeyAuthenticateFinishResponse represents the response from completing passkey authentication.
+type PasskeyAuthenticateFinishResponse struct {
+	// Success indicates whether the authentication was successful
+	Success bool `json:"success"`
+
+	// UserID is the ID of the authenticated user
+	UserID string `json:"user_id,omitempty"`
+
+	// Email is the email of the authenticated user
+	Email string `json:"email,omitempty"`
+
+	// Message provides additional information
+	Message string `json:"message,omitempty"`
 }
 
 // handlePasskeyLoginFinish completes passkey authentication.
+//
+// This endpoint:
+// 1. Validates the request and session
+// 2. Parses the credential assertion response from the browser
+// 3. Calls FinishPasskeyAuthentication to verify signature and authenticate
+// 4. Returns success with user information
+//
+// Request body:
+//
+//	{
+//	  "session_id": "base64-session-id",
+//	  "credential": { ... PublicKeyCredential assertion object ... }
+//	}
+//
+// Response:
+//
+//	{
+//	  "success": true,
+//	  "user_id": "user-id",
+//	  "email": "user@example.com",
+//	  "message": "Authentication successful"
+//	}
 func (c *Connector) handlePasskeyLoginFinish(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement in Phase 2 Week 7
-	http.Error(w, "Not implemented", http.StatusNotImplemented)
+	// Only accept POST requests
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Check if passkeys are enabled
+	if !c.config.Passkey.Enabled {
+		c.logger.Warn("passkey authentication finish attempted but passkeys are disabled")
+		http.Error(w, "Passkeys are not enabled", http.StatusForbidden)
+		return
+	}
+
+	// Parse request body
+	var req PasskeyAuthenticateFinishRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		c.logger.Errorf("failed to parse request body: %v", err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate required fields
+	if req.SessionID == "" {
+		http.Error(w, "session_id is required", http.StatusBadRequest)
+		return
+	}
+	if len(req.Credential) == 0 {
+		http.Error(w, "credential is required", http.StatusBadRequest)
+		return
+	}
+
+	// Parse credential assertion response
+	ctx := r.Context()
+	parsedResponse, err := c.parseCredentialAssertionResponse(req.Credential)
+	if err != nil {
+		c.logger.Errorf("failed to parse credential assertion: %v", err)
+		http.Error(w, "Invalid credential format", http.StatusBadRequest)
+		return
+	}
+
+	// Finish passkey authentication
+	user, passkey, err := c.FinishPasskeyAuthentication(ctx, req.SessionID, parsedResponse)
+	if err != nil {
+		c.logger.Errorf("failed to finish passkey authentication: %v", err)
+
+		// Provide more specific error messages
+		if err.Error() == "invalid session" || err.Error() == "session expired" {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+		} else if err.Error() == "authenticator clone detected" {
+			http.Error(w, "Security error: authenticator clone detected", http.StatusForbidden)
+		} else if err.Error() == "credential not found: passkey not found" {
+			http.Error(w, "Credential not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Authentication failed", http.StatusUnauthorized)
+		}
+		return
+	}
+
+	// Prepare response
+	resp := PasskeyAuthenticateFinishResponse{
+		Success: true,
+		UserID:  user.ID,
+		Email:   user.Email,
+		Message: "Authentication successful",
+	}
+
+	// Send response
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		c.logger.Errorf("failed to encode response: %v", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
+
+	c.logger.Infof("passkey authentication complete for user %s (passkey: %s)", user.ID, passkey.ID)
 }
 
 // PasskeyRegisterBeginRequest represents the request body for beginning passkey registration.
@@ -325,4 +537,21 @@ func (c *Connector) parseCredentialCreationResponse(credentialJSON json.RawMessa
 	}
 
 	return ccr, nil
+}
+
+// parseCredentialAssertionResponse parses the credential assertion response from the browser.
+//
+// The browser sends a PublicKeyCredential object which contains the assertion response.
+// This function uses the go-webauthn protocol package to parse it into the expected format.
+func (c *Connector) parseCredentialAssertionResponse(credentialJSON json.RawMessage) (*protocol.ParsedCredentialAssertionData, error) {
+	// Parse the credential using the protocol package
+	// The protocol package provides a ParseCredentialRequestResponse function
+	// that handles all the base64 decoding and validation
+	reader := bytes.NewReader(credentialJSON)
+	car, err := protocol.ParseCredentialRequestResponseBody(reader)
+	if err != nil {
+		return nil, err
+	}
+
+	return car, nil
 }

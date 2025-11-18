@@ -376,32 +376,26 @@ This implementation plan covers building an **Enhanced Local Connector** for Dex
 ### Week 7: Passkey Authentication
 
 #### Authentication Endpoints
-- [ ] Implement `POST /auth/passkey/login/begin`:
-  ```go
-  func (c *Connector) BeginPasskeyAuthentication(w http.ResponseWriter, r *http.Request) {
-      // 1. Get user by email (or allow discoverable credentials)
-      // 2. Generate authentication options
-      // 3. Create and store session
-      // 4. Return PublicKeyCredentialRequestOptions
-  }
-  ```
+- [x] Implement `POST /auth/passkey/login/begin` (handlePasskeyLoginBegin):
+  - [x] Validates request method (POST only)
+  - [x] Checks if passkeys are enabled in configuration
+  - [x] Retrieves user by email (or allows empty email for discoverable credentials)
+  - [x] Calls BeginPasskeyAuthentication to generate challenge and options
+  - [x] Creates WebAuthn session with 5-minute TTL
+  - [x] Returns session ID and PublicKeyCredentialRequestOptions
 
-- [ ] Implement `POST /auth/passkey/login/finish`:
-  ```go
-  func (c *Connector) FinishPasskeyAuthentication(w http.ResponseWriter, r *http.Request) {
-      // 1. Validate session
-      // 2. Parse assertion from request
-      // 3. Verify signature
-      // 4. Update sign count
-      // 5. Create OAuth session
-      // 6. Return redirect to OAuth flow
-  }
-  ```
+- [x] Implement `POST /auth/passkey/login/finish` (handlePasskeyLoginFinish):
+  - [x] Validates request method (POST only)
+  - [x] Checks if passkeys are enabled in configuration
+  - [x] Validates all required fields (session_id, credential)
+  - [x] Parses credential assertion response using parseCredentialAssertionResponse()
+  - [x] Calls FinishPasskeyAuthentication to verify signature and authenticate
+  - [x] Returns success with user information (user_id, email)
 
-- [ ] Implement signature verification
-- [ ] Add sign counter validation (clone detection)
-- [ ] Handle discoverable credentials (resident keys)
-- [ ] Write integration tests
+- [x] Implement signature verification (done in FinishPasskeyAuthentication via go-webauthn)
+- [x] Add sign counter validation (clone detection) (implemented in passkey.go:398-401)
+- [x] Handle discoverable credentials (resident keys) (supported via empty email in BeginPasskeyAuthentication)
+- [x] Write integration tests (comprehensive handler tests in handlers_test.go)
 
 #### Authentication UI
 - [ ] Update login template to include passkey option

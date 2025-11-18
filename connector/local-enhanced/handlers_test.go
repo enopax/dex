@@ -500,3 +500,359 @@ func TestParseCredentialCreationResponse(t *testing.T) {
 		})
 	}
 }
+
+func TestHandlePasskeyLoginBegin(t *testing.T) {
+	// Setup
+	config := DefaultTestConfig(t)
+	defer CleanupTestStorage(t, config.DataDir)
+
+	connector, err := New(config, TestLogger(t))
+	require.NoError(t, err)
+
+	// Create a test user with a passkey
+	ctx := TestContext(t)
+	testUser := NewTestUser("alice@example.com")
+	user := testUser.ToUser()
+	testPasskey := NewTestPasskey(user.ID, "Test Passkey")
+	user.Passkeys = append(user.Passkeys, *testPasskey.ToPasskey())
+	err = connector.storage.CreateUser(ctx, user)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name           string
+		method         string
+		requestBody    interface{}
+		passkeyEnabled bool
+		expectedStatus int
+		validateResp   func(t *testing.T, resp *PasskeyAuthenticateBeginResponse)
+	}{
+		{
+			name:           "successful authentication begin with email",
+			method:         http.MethodPost,
+			requestBody:    PasskeyAuthenticateBeginRequest{Email: user.Email},
+			passkeyEnabled: true,
+			expectedStatus: http.StatusOK,
+			validateResp: func(t *testing.T, resp *PasskeyAuthenticateBeginResponse) {
+				assert.NotEmpty(t, resp.SessionID, "session ID should not be empty")
+				assert.NotNil(t, resp.Options, "options should not be nil")
+			},
+		},
+		// Note: discoverable credentials test is skipped because it requires special handling
+		// The go-webauthn library requires at least one credential for BeginLogin to work
+		// In a real scenario, discoverable credentials are handled differently on the client side
+		{
+			name:           "method not allowed",
+			method:         http.MethodGet,
+			requestBody:    PasskeyAuthenticateBeginRequest{Email: user.Email},
+			passkeyEnabled: true,
+			expectedStatus: http.StatusMethodNotAllowed,
+			validateResp:   nil,
+		},
+		{
+			name:           "passkeys disabled",
+			method:         http.MethodPost,
+			requestBody:    PasskeyAuthenticateBeginRequest{Email: user.Email},
+			passkeyEnabled: false,
+			expectedStatus: http.StatusForbidden,
+			validateResp:   nil,
+		},
+		{
+			name:           "invalid request body",
+			method:         http.MethodPost,
+			requestBody:    "invalid json",
+			passkeyEnabled: true,
+			expectedStatus: http.StatusBadRequest,
+			validateResp:   nil,
+		},
+		{
+			name:           "user not found",
+			method:         http.MethodPost,
+			requestBody:    PasskeyAuthenticateBeginRequest{Email: "nonexistent@example.com"},
+			passkeyEnabled: true,
+			expectedStatus: http.StatusNotFound,
+			validateResp:   nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set passkey enabled state
+			connector.config.Passkey.Enabled = tt.passkeyEnabled
+
+			// Create request
+			var body []byte
+			if str, ok := tt.requestBody.(string); ok {
+				body = []byte(str)
+			} else {
+				body, err = json.Marshal(tt.requestBody)
+				require.NoError(t, err)
+			}
+
+			req := httptest.NewRequest(tt.method, "/passkey/login/begin", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+
+			// Create response recorder
+			w := httptest.NewRecorder()
+
+			// Call handler
+			connector.handlePasskeyLoginBegin(w, req)
+
+			// Check status code
+			assert.Equal(t, tt.expectedStatus, w.Code)
+
+			// Validate response if needed
+			if tt.validateResp != nil && w.Code == http.StatusOK {
+				var resp PasskeyAuthenticateBeginResponse
+				err := json.NewDecoder(w.Body).Decode(&resp)
+				require.NoError(t, err)
+				tt.validateResp(t, &resp)
+			}
+		})
+	}
+}
+
+func TestHandlePasskeyLoginBeginSessionCreation(t *testing.T) {
+	// Setup
+	config := DefaultTestConfig(t)
+	defer CleanupTestStorage(t, config.DataDir)
+
+	connector, err := New(config, TestLogger(t))
+	require.NoError(t, err)
+
+	// Create a test user with a passkey
+	ctx := TestContext(t)
+	testUser := NewTestUser("bob@example.com")
+	user := testUser.ToUser()
+	testPasskey := NewTestPasskey(user.ID, "Test Passkey")
+	user.Passkeys = append(user.Passkeys, *testPasskey.ToPasskey())
+	err = connector.storage.CreateUser(ctx, user)
+	require.NoError(t, err)
+
+	// Create request
+	reqBody := PasskeyAuthenticateBeginRequest{Email: user.Email}
+	body, err := json.Marshal(reqBody)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/passkey/login/begin", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	// Create response recorder
+	w := httptest.NewRecorder()
+
+	// Call handler
+	connector.handlePasskeyLoginBegin(w, req)
+
+	// Check response
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp PasskeyAuthenticateBeginResponse
+	err = json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+
+	// Verify session was created and stored
+	session, err := connector.storage.GetWebAuthnSession(context.Background(), resp.SessionID)
+	require.NoError(t, err)
+	assert.Equal(t, user.ID, session.UserID)
+	assert.Equal(t, "authentication", session.Operation)
+	assert.NotEmpty(t, session.Challenge)
+}
+
+func TestHandlePasskeyLoginFinish(t *testing.T) {
+	// Setup
+	config := DefaultTestConfig(t)
+	defer CleanupTestStorage(t, config.DataDir)
+
+	connector, err := New(config, TestLogger(t))
+	require.NoError(t, err)
+
+	// Create a test user with a passkey
+	ctx := TestContext(t)
+	testUser := NewTestUser("alice@example.com")
+	user := testUser.ToUser()
+	testPasskey := NewTestPasskey(user.ID, "Test Passkey")
+	user.Passkeys = append(user.Passkeys, *testPasskey.ToPasskey())
+	err = connector.storage.CreateUser(ctx, user)
+	require.NoError(t, err)
+
+	// Create a valid session by calling begin authentication
+	session, options, err := connector.BeginPasskeyAuthentication(ctx, user.Email)
+	require.NoError(t, err)
+	require.NotNil(t, session)
+	require.NotNil(t, options)
+
+	// Mock credential assertion response
+	mockCredential := json.RawMessage(`{
+		"id": "test-credential-id",
+		"type": "public-key",
+		"rawId": "dGVzdC1jcmVkZW50aWFsLWlk",
+		"response": {
+			"clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoidGVzdCIsIm9yaWdpbiI6Imh0dHBzOi8vYXV0aC5lbm9wYXguaW8ifQ==",
+			"authenticatorData": "test-auth-data",
+			"signature": "test-signature"
+		}
+	}`)
+
+	tests := []struct {
+		name           string
+		method         string
+		requestBody    interface{}
+		passkeyEnabled bool
+		expectedStatus int
+		validateResp   func(t *testing.T, resp *PasskeyAuthenticateFinishResponse)
+	}{
+		{
+			name:   "method not allowed",
+			method: http.MethodGet,
+			requestBody: PasskeyAuthenticateFinishRequest{
+				SessionID:  session.SessionID,
+				Credential: mockCredential,
+			},
+			passkeyEnabled: true,
+			expectedStatus: http.StatusMethodNotAllowed,
+			validateResp:   nil,
+		},
+		{
+			name:   "passkeys disabled",
+			method: http.MethodPost,
+			requestBody: PasskeyAuthenticateFinishRequest{
+				SessionID:  session.SessionID,
+				Credential: mockCredential,
+			},
+			passkeyEnabled: false,
+			expectedStatus: http.StatusForbidden,
+			validateResp:   nil,
+		},
+		{
+			name:           "invalid request body",
+			method:         http.MethodPost,
+			requestBody:    "invalid json",
+			passkeyEnabled: true,
+			expectedStatus: http.StatusBadRequest,
+			validateResp:   nil,
+		},
+		{
+			name:   "missing session ID",
+			method: http.MethodPost,
+			requestBody: PasskeyAuthenticateFinishRequest{
+				SessionID:  "",
+				Credential: mockCredential,
+			},
+			passkeyEnabled: true,
+			expectedStatus: http.StatusBadRequest,
+			validateResp:   nil,
+		},
+		{
+			name:   "missing credential",
+			method: http.MethodPost,
+			requestBody: PasskeyAuthenticateFinishRequest{
+				SessionID:  session.SessionID,
+				Credential: nil,
+			},
+			passkeyEnabled: true,
+			expectedStatus: http.StatusBadRequest,
+			validateResp:   nil,
+		},
+		{
+			name:   "invalid session ID",
+			method: http.MethodPost,
+			requestBody: PasskeyAuthenticateFinishRequest{
+				SessionID:  "nonexistent-session-id",
+				Credential: mockCredential,
+			},
+			passkeyEnabled: true,
+			expectedStatus: http.StatusBadRequest,
+			validateResp:   nil,
+		},
+		{
+			name:   "invalid credential format",
+			method: http.MethodPost,
+			requestBody: PasskeyAuthenticateFinishRequest{
+				SessionID:  session.SessionID,
+				Credential: json.RawMessage(`{"invalid": "format"}`),
+			},
+			passkeyEnabled: true,
+			expectedStatus: http.StatusBadRequest,
+			validateResp:   nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set passkey enabled state
+			connector.config.Passkey.Enabled = tt.passkeyEnabled
+
+			// Create request
+			var body []byte
+			if str, ok := tt.requestBody.(string); ok {
+				body = []byte(str)
+			} else {
+				body, err = json.Marshal(tt.requestBody)
+				require.NoError(t, err)
+			}
+
+			req := httptest.NewRequest(tt.method, "/passkey/login/finish", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+
+			// Create response recorder
+			w := httptest.NewRecorder()
+
+			// Call handler
+			connector.handlePasskeyLoginFinish(w, req)
+
+			// Check status code
+			assert.Equal(t, tt.expectedStatus, w.Code, "unexpected status code")
+
+			// Validate response if needed
+			if tt.validateResp != nil && w.Code == http.StatusOK {
+				var resp PasskeyAuthenticateFinishResponse
+				err := json.NewDecoder(w.Body).Decode(&resp)
+				require.NoError(t, err)
+				tt.validateResp(t, &resp)
+			}
+		})
+	}
+}
+
+func TestParseCredentialAssertionResponse(t *testing.T) {
+	// Setup
+	config := DefaultTestConfig(t)
+	defer CleanupTestStorage(t, config.DataDir)
+
+	connector, err := New(config, TestLogger(t))
+	require.NoError(t, err)
+
+	tests := []struct {
+		name        string
+		credential  json.RawMessage
+		expectError bool
+	}{
+		{
+			name:        "empty credential",
+			credential:  json.RawMessage(`{}`),
+			expectError: true,
+		},
+		{
+			name:        "invalid json",
+			credential:  json.RawMessage(`{invalid json`),
+			expectError: true,
+		},
+		{
+			name: "missing required fields",
+			credential: json.RawMessage(`{
+				"id": "test-id"
+			}`),
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := connector.parseCredentialAssertionResponse(tt.credential)
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
