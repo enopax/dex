@@ -1221,10 +1221,63 @@ type AuthSetupToken struct {
 - [x] Test gRPC API endpoints - COMPLETE (Phase 5 Week 11)
   - Tests in grpc_test.go (12 test functions, 30+ test cases)
   - All tests passing after Week 11.5 bug fixes
-- [ ] Run coverage analysis (target: >80%) - IN PROGRESS
-  - Current: 68.8%
-  - Need: +11.2 percentage points
-  - Focus areas: Handler tests (some failing due to assertion mismatches), template rendering (deferred)
+- [x] Run coverage analysis (target: >80%) - COMPLETE (2025-11-18)
+  - **Current**: 68.8%
+  - **Need**: +11.2 percentage points to reach 80%
+  - **Analysis**: See `docs/enhancements/coverage-analysis.md` for detailed report
+  - **Critical Gaps**: TOTP handlers (0%), Magic link handlers (0%), gRPC TOTP endpoints (0%)
+  - **Plan**:
+    - Phase 1 (1-2 days): Test TOTP/Magic handlers → +6-8% → Target 75-77%
+    - Phase 2 (2-3 days): Integration tests → +3-5% → Target 78-82%
+    - Phase 3 (optional): Browser tests → +2-3% → Target 80-85%
+  - **Next Task**: Implement Phase 1 - TOTP and Magic Link handler tests
+
+#### Coverage Improvement Phase 1 (Target: 75-77%)
+
+**Goal**: Test previously untested TOTP and Magic Link handlers to gain +6-8% coverage
+
+- [ ] Create `handlers_totp_test.go` with comprehensive TOTP handler tests:
+  - [ ] Test `handleTOTPEnable` (0% → 80%+)
+    - Valid user → returns secret, QR code, backup codes
+    - Missing user_id → returns 400
+    - User not found → returns 404
+    - TOTP already enabled → returns 409
+    - Concurrent requests
+  - [ ] Test `handleTOTPVerify` (0% → 80%+)
+    - Valid TOTP code → enables TOTP, stores backup codes
+    - Invalid code → returns error
+    - Missing fields → returns 400
+    - User not found → returns 404
+  - [ ] Test `handleTOTPValidate` (0% → 80%+)
+    - Valid TOTP code → returns success
+    - Invalid code → returns error
+    - Backup code fallback → marks code as used
+    - Rate limiting enforced
+    - User without TOTP → returns error
+
+- [ ] Create `handlers_magiclink_test.go` with comprehensive magic link handler tests:
+  - [ ] Test `handleMagicLinkSend` (0% → 80%+)
+    - Valid email → sends email, returns success
+    - Invalid email → returns 400
+    - User not found → returns 404
+    - Rate limit exceeded → returns 429
+    - Email sending failure → returns 500
+  - [ ] Test `handleMagicLinkVerify` (0% → 80%+)
+    - Valid token → authenticates user, redirects
+    - Invalid token → returns 401
+    - Expired token → returns 401
+    - Already used token → returns 401
+    - 2FA required → redirects to 2FA prompt
+
+- [ ] Add gRPC TOTP endpoint tests to `grpc_test.go`:
+  - [ ] Test `VerifyTOTPSetup` (0% → 75%+)
+  - [ ] Test `DisableTOTP` (0% → 75%+)
+  - [ ] Test `GetTOTPInfo` (0% → 75%+)
+  - [ ] Test `RegenerateBackupCodes` (0% → 75%+)
+
+- [ ] Re-run coverage analysis and verify improvement
+
+**Deliverable**: Coverage improved to 75-77%, all critical handlers tested
 
 #### Integration Tests
 - [ ] Test complete passkey registration flow

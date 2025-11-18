@@ -2731,8 +2731,40 @@ golangci-lint run
 
 These failing tests are structural issues with test assertions expecting different HTTP status codes or response formats than the actual handlers return. The handlers work correctly in practice but the test assertions need adjustment.
 
+### Coverage Analysis (2025-11-18)
+
+**Comprehensive Coverage Report**: See `docs/enhancements/coverage-analysis.md` for detailed analysis
+
+**Summary**:
+- **Current Coverage**: 68.8% (4,883/7,093 statements)
+- **Target**: >80% (+11.2 percentage points needed)
+- **Critical Gaps**: TOTP handlers (0%), Magic link handlers (0%), gRPC TOTP endpoints (0%)
+
+**Improvement Plan**:
+- **Phase 1** (1-2 days): Test TOTP/Magic handlers → +6-8% → Target 75-77%
+- **Phase 2** (2-3 days): Integration tests → +3-5% → Target 78-82%
+- **Phase 3** (optional): Browser tests → +2-3% → Target 80-85%
+
+**Next Priority**: Implement Phase 1 - TOTP and Magic Link handler tests
+
+**Coverage by Component**:
+- ✅ OAuth Integration: 100%
+- ✅ Storage Operations: 80-100%
+- ✅ Validation Functions: 84-100%
+- ✅ TOTP Core Logic: 90-100%
+- ✅ 2FA Policy Enforcement: 85%+
+- ✅ Magic Link Core Logic: 75-100%
+- ❌ TOTP HTTP Handlers: 0%
+- ❌ Magic Link HTTP Handlers: 0%
+- ❌ gRPC TOTP Endpoints: 0%
+- ⚠️ Passkey Finish Flows: 18.5%, 12.8%
+
+**Acceptable Low Coverage**:
+- Passkey finish functions (18.5%, 12.8%) - Session validation tested, cryptographic verification handled by go-webauthn library, full testing requires browser/virtual authenticator
+
 ### Next Steps
 
+- [ ] Implement Phase 1 tests: TOTP and Magic Link handlers (see `docs/enhancements/coverage-analysis.md`)
 - [ ] Fix 2FA handler test assertions to match actual handler behavior (HTTP 303 See Other redirects)
 - [ ] Implement template rendering for auth setup flow
 - [ ] Browser testing with virtual authenticator (Chrome DevTools)
@@ -2741,5 +2773,5 @@ These failing tests are structural issues with test assertions expecting differe
 ---
 
 **Last Updated**: 2025-11-18
-**Version**: 1.2
+**Version**: 1.3
 **Maintainer**: Enopax Platform Team
