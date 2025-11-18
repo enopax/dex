@@ -3,7 +3,7 @@
 **Project**: Dex Fork with Enhanced Local Connector
 **Repository**: enopax/dex
 **Branch**: `feature/passkeys` (implementation), `main` (upstream-compatible)
-**Last Updated**: 2025-11-18 (Phase 2 Week 7 completed - Passkey authentication endpoints)
+**Last Updated**: 2025-11-18 (Phase 2 Week 7 completed - HTML templates created)
 
 ---
 
@@ -701,8 +701,143 @@ Passkey: PasskeyConfig{
 **Helper Functions**:
 - `parseCredentialAssertionResponse()` - Parses the browser's credential assertion response using the go-webauthn protocol package
 
-**Next Steps** (Phase 2 Week 7):
-- [ ] Create HTML templates for passkey UI
+---
+
+### HTML Templates (Phase 2 Week 7 - COMPLETE)
+
+**Location**: `connector/local-enhanced/templates/`
+
+**Template Files**:
+
+#### 1. login.html
+
+**Purpose**: Main login page with passkey and password authentication options.
+
+**Features**:
+- **Primary Passkey Login**: Prominent "Login with Passkey" button as the primary authentication method
+- **Password Fallback**: Traditional username/password form for users without passkeys
+- **Magic Link Option**: Optional "Send Magic Link" button (if enabled in configuration)
+- **Error Handling**: Display errors for both passkey and password authentication
+- **WebAuthn Integration**: Full client-side WebAuthn API implementation
+- **Responsive Design**: Uses Dex theme classes for consistent styling
+
+**Template Variables**:
+- `.PasskeyEnabled` - Whether passkey authentication is enabled
+- `.MagicLinkEnabled` - Whether magic link authentication is enabled
+- `.PostURL` - Form submission URL for password authentication
+- `.PasskeyBeginURL` - Endpoint to begin passkey authentication
+- `.PasskeyFinishURL` - Endpoint to complete passkey authentication
+- `.MagicLinkSendURL` - Endpoint to send magic link
+- `.CallbackURL` - OAuth callback URL after successful authentication
+- `.UsernamePrompt` - Label for username field (e.g., "Email")
+- `.Username` - Pre-filled username (if any)
+- `.Invalid` - Whether previous login attempt was invalid
+- `.BackLink` - Link to return to connector selection
+
+**JavaScript Functionality**:
+- `arrayBufferToBase64()` - Helper to convert WebAuthn ArrayBuffers to Base64
+- Passkey login handler with complete WebAuthn ceremony
+- Magic link sender with email validation
+- Form submission handler to prevent double-submit
+
+---
+
+#### 2. setup-auth.html
+
+**Purpose**: User authentication setup page shown during registration.
+
+**Features**:
+- **Passkey Setup**: One-click passkey registration with WebAuthn
+- **Password Setup**: Password creation form with validation
+- **Both Methods Option**: Recommended option to set up both authentication methods
+- **Visual Hierarchy**: Clear presentation of options with icons and descriptions
+- **Setup Progress**: Shows success indicators for completed setups
+- **Continue Button**: Appears after at least one method is set up
+- **Validation**: Client-side password strength validation
+
+**Template Variables**:
+- `.PasskeyEnabled` - Whether passkey setup is available
+- `.SetupToken` - Security token for setup session
+- `.UserID` - ID of user setting up authentication
+- `.AppName` - Name of application to return to
+- `.AllowSkip` - Whether user can skip setup
+- `.SkipURL` - URL to skip setup (if allowed)
+- `.ContinueURL` - URL to continue after setup
+- `.PasskeyRegisterBeginURL` - Endpoint to begin passkey registration
+- `.PasskeyRegisterFinishURL` - Endpoint to complete passkey registration
+- `.PasswordSetupURL` - Endpoint to set up password
+
+**JavaScript Functionality**:
+- Passkey registration with credential naming
+- Password validation (length, complexity, confirmation)
+- Setup progress tracking
+- Setup completion detection
+
+---
+
+#### 3. manage-credentials.html
+
+**Purpose**: Credential management page for users to view and manage their authentication methods.
+
+**Features**:
+- **Password Management**: Change or set password
+- **Passkey Management**: List, add, rename, and delete passkeys
+- **TOTP Management**: Enable/disable 2FA, view backup codes
+- **Credential Metadata**: Shows creation date and last used date for passkeys
+- **Confirmation Dialogs**: Prevents accidental deletion
+- **Real-time Updates**: Updates UI after credential operations
+- **Security Features**: Requires current password to change password
+
+**Template Variables**:
+- `.UserID` - Current user's ID
+- `.HasPassword` - Whether user has a password set
+- `.PasskeyEnabled` - Whether passkey feature is enabled
+- `.Passkeys` - List of user's passkeys
+- `.TOTPEnabled` - Whether TOTP feature is enabled
+- `.HasTOTP` - Whether user has TOTP enabled
+- `.BackupCodes` - List of backup codes (if TOTP enabled)
+- `.BackURL` - URL to return to dashboard
+- `.ChangePasswordURL` - Endpoint to change password
+- `.PasskeyRegisterBeginURL` - Endpoint to begin passkey registration
+- `.PasskeyRegisterFinishURL` - Endpoint to complete passkey registration
+- `.PasskeyDeleteURL` - Endpoint to delete a passkey
+- `.PasskeyRenameURL` - Endpoint to rename a passkey
+
+**JavaScript Functionality**:
+- Add passkey with WebAuthn ceremony
+- Delete passkey with confirmation
+- Rename passkey with inline editing
+- Change password with current password verification
+- Set password for passwordless accounts
+- TOTP setup with QR code display
+- Backup code management
+
+---
+
+**Template Integration**:
+
+These templates follow Dex's template structure:
+```go
+{{ template "header.html" . }}
+<!-- Content here -->
+{{ template "footer.html" . }}
+```
+
+**Styling**: Uses Dex's built-in CSS classes:
+- `.theme-panel` - Main content container
+- `.theme-heading` - Page headings
+- `.theme-form-row` - Form row container
+- `.theme-form-label` - Form field labels
+- `.theme-form-input` - Input fields
+- `.dex-btn` - Button base class
+- `.theme-btn--primary` - Primary action button
+- `.theme-btn--secondary` - Secondary action button
+- `.dex-error-box` - Error message container
+- `.dex-subtle-text` - Subtle/secondary text
+
+**Next Steps** (Phase 2 Week 7-8):
+- [ ] Integrate templates with HTTP handlers
+- [ ] Test templates in real browser environment
 - [ ] Integrate with OAuth flow
 - [ ] Implement password authentication handler
 

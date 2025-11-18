@@ -345,31 +345,12 @@ This implementation plan covers building an **Enhanced Local Connector** for Dex
 - [x] Write integration tests
 
 #### Registration UI
-- [ ] Create passkey registration template (HTML + JavaScript):
-  ```html
-  <button id="register-passkey">Register Passkey</button>
-  <script>
-    async function registerPasskey() {
-      const optionsRes = await fetch('/auth/passkey/register/begin');
-      const options = await optionsRes.json();
-
-      const credential = await navigator.credentials.create({
-        publicKey: options.publicKey
-      });
-
-      await fetch('/auth/passkey/register/finish', {
-        method: 'POST',
-        body: JSON.stringify(credential)
-      });
-    }
-  </script>
-  ```
-
-- [ ] Add credential naming functionality
-- [ ] Implement error messages
+- [x] Create passkey registration template (HTML + JavaScript) - Implemented in templates/setup-auth.html
+- [x] Add credential naming functionality - Included in setup-auth.html with prompt for passkey name
+- [x] Implement error messages - Error handling implemented in all templates
 - [ ] Test in multiple browsers
 
-**Deliverable**: Passkey registration working end-to-end
+**Deliverable**: Passkey registration working end-to-end (templates complete, browser testing pending)
 
 ---
 
@@ -398,10 +379,11 @@ This implementation plan covers building an **Enhanced Local Connector** for Dex
 - [x] Write integration tests (comprehensive handler tests in handlers_test.go)
 
 #### Authentication UI
-- [ ] Update login template to include passkey option
-- [ ] Implement "Login with Passkey" button
-- [ ] Add fallback to password login
-- [ ] Test user flows
+- [x] Update login template to include passkey option - Implemented in templates/login.html
+- [x] Implement "Login with Passkey" button - Fully functional with WebAuthn API integration
+- [x] Add fallback to password login - Password form included with passkey as primary option
+- [x] Create credential management UI - Implemented in templates/manage-credentials.html
+- [ ] Test user flows in real browser environment
 
 #### OAuth Integration
 - [ ] Integrate passkey auth with Dex OAuth flow

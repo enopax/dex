@@ -1,0 +1,330 @@
+{{ template "header.html" . }}
+
+<div class="theme-panel">
+  <h2 class="theme-heading">Set Up Your Authentication</h2>
+
+  <p style="margin-bottom: 20px; color: #666;">
+    Choose how you want to log in to your Enopax account.
+    You can set up multiple methods for added security.
+  </p>
+
+  <!-- Passkey Setup (Recommended) -->
+  {{ if .PasskeyEnabled }}
+  <div class="auth-option" style="margin-bottom: 20px; padding: 15px; border: 2px solid #e0e0e0; border-radius: 8px;">
+    <div style="display: flex; align-items: center; margin-bottom: 10px;">
+      <span style="font-size: 24px; margin-right: 10px;">🔐</span>
+      <div>
+        <h3 style="margin: 0; font-size: 18px;">Passkey (Recommended)</h3>
+        <p style="margin: 5px 0 0 0; font-size: 14px; color: #666;">
+          Use your fingerprint, face, or device PIN for secure, passwordless login
+        </p>
+      </div>
+    </div>
+    <button id="setup-passkey-btn" class="dex-btn theme-btn--primary" style="width: 100%;">
+      Set Up Passkey
+    </button>
+    <div id="passkey-success" style="display: none; color: green; margin-top: 10px;">
+      ✓ Passkey set up successfully!
+    </div>
+    <div id="passkey-error" class="dex-error-box" style="display: none; margin-top: 10px;"></div>
+  </div>
+  {{ end }}
+
+  <!-- Password Setup -->
+  <div class="auth-option" style="margin-bottom: 20px; padding: 15px; border: 2px solid #e0e0e0; border-radius: 8px;">
+    <div style="display: flex; align-items: center; margin-bottom: 10px;">
+      <span style="font-size: 24px; margin-right: 10px;">🔑</span>
+      <div>
+        <h3 style="margin: 0; font-size: 18px;">Password</h3>
+        <p style="margin: 5px 0 0 0; font-size: 14px; color: #666;">
+          Traditional password authentication
+        </p>
+      </div>
+    </div>
+
+    <form id="password-setup-form">
+      <div class="theme-form-row">
+        <div class="theme-form-label">
+          <label for="password">Password</label>
+        </div>
+        <input
+          id="password"
+          name="password"
+          type="password"
+          class="theme-form-input"
+          placeholder="Enter password"
+          minlength="8"
+          required
+        />
+      </div>
+
+      <div class="theme-form-row">
+        <div class="theme-form-label">
+          <label for="password-confirm">Confirm Password</label>
+        </div>
+        <input
+          id="password-confirm"
+          name="password-confirm"
+          type="password"
+          class="theme-form-input"
+          placeholder="Confirm password"
+          minlength="8"
+          required
+        />
+      </div>
+
+      <div id="password-requirements" style="font-size: 12px; color: #666; margin-bottom: 10px;">
+        Password must be at least 8 characters and contain a letter and a number.
+      </div>
+
+      <button id="setup-password-btn" type="submit" class="dex-btn theme-btn--primary" style="width: 100%;">
+        Set Up Password
+      </button>
+
+      <div id="password-success" style="display: none; color: green; margin-top: 10px;">
+        ✓ Password set up successfully!
+      </div>
+      <div id="password-error" class="dex-error-box" style="display: none; margin-top: 10px;"></div>
+    </form>
+  </div>
+
+  <!-- Both Options (Most Secure) -->
+  <div class="auth-option" style="margin-bottom: 20px; padding: 15px; border: 2px solid #4CAF50; border-radius: 8px;">
+    <div style="display: flex; align-items: center; margin-bottom: 10px;">
+      <span style="font-size: 24px; margin-right: 10px;">🔒</span>
+      <div>
+        <h3 style="margin: 0; font-size: 18px;">Both Methods (Most Secure)</h3>
+        <p style="margin: 5px 0 0 0; font-size: 14px; color: #666;">
+          Set up both passkey and password for maximum flexibility and security
+        </p>
+      </div>
+    </div>
+    <button id="setup-both-btn" class="dex-btn theme-btn--primary" style="width: 100%; background-color: #4CAF50;">
+      Set Up Both
+    </button>
+  </div>
+
+  <!-- Skip for Now (if allowed) -->
+  {{ if .AllowSkip }}
+  <div style="text-align: center; margin-top: 20px;">
+    <a href="{{ .SkipURL }}" class="dex-subtle-text">Skip for now</a>
+  </div>
+  {{ end }}
+
+  <!-- Continue Button (shown after setup) -->
+  <div id="continue-section" style="display: none; margin-top: 30px; text-align: center;">
+    <button id="continue-btn" class="dex-btn theme-btn--primary" style="width: 100%;">
+      Continue to {{ .AppName }}
+    </button>
+  </div>
+</div>
+
+<script type="text/javascript">
+  const setupToken = '{{ .SetupToken }}';
+  const userID = '{{ .UserID }}';
+  let passkeySetup = false;
+  let passwordSetup = false;
+
+  {{ if .PasskeyEnabled }}
+  // Passkey Setup Handler
+  document.getElementById('setup-passkey-btn').addEventListener('click', async function(e) {
+    e.preventDefault();
+
+    const button = e.target;
+    const originalText = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Setting up...';
+
+    try {
+      // Step 1: Begin passkey registration
+      const beginResponse = await fetch('{{ .PasskeyRegisterBeginURL }}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_id: userID
+        })
+      });
+
+      if (!beginResponse.ok) {
+        const error = await beginResponse.json();
+        throw new Error(error.message || 'Failed to begin registration');
+      }
+
+      const { session_id, options } = await beginResponse.json();
+
+      // Step 2: Call WebAuthn API
+      const credential = await navigator.credentials.create({
+        publicKey: options.publicKey
+      });
+
+      if (!credential) {
+        throw new Error('Registration cancelled');
+      }
+
+      // Step 3: Finish passkey registration
+      const passkeyName = prompt('Give your passkey a name (e.g., "MacBook Touch ID"):', 'My Passkey');
+      if (!passkeyName) {
+        throw new Error('Passkey name is required');
+      }
+
+      const finishResponse = await fetch('{{ .PasskeyRegisterFinishURL }}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_id: session_id,
+          credential: {
+            id: credential.id,
+            type: credential.type,
+            rawId: arrayBufferToBase64(credential.rawId),
+            response: {
+              clientDataJSON: arrayBufferToBase64(credential.response.clientDataJSON),
+              attestationObject: arrayBufferToBase64(credential.response.attestationObject)
+            }
+          },
+          passkey_name: passkeyName
+        })
+      });
+
+      if (!finishResponse.ok) {
+        const error = await finishResponse.json();
+        throw new Error(error.message || 'Registration failed');
+      }
+
+      // Success!
+      passkeySetup = true;
+      document.getElementById('passkey-success').style.display = 'block';
+      button.textContent = '✓ Passkey Set Up';
+      button.style.backgroundColor = '#4CAF50';
+
+      checkSetupComplete();
+
+    } catch (error) {
+      console.error('Passkey setup error:', error);
+
+      const errorDiv = document.getElementById('passkey-error');
+      errorDiv.textContent = error.message || 'Failed to set up passkey. Please try again.';
+      errorDiv.style.display = 'block';
+
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  });
+  {{ end }}
+
+  // Password Setup Handler
+  document.getElementById('password-setup-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const password = document.getElementById('password').value;
+    const passwordConfirm = document.getElementById('password-confirm').value;
+
+    // Client-side validation
+    if (password !== passwordConfirm) {
+      const errorDiv = document.getElementById('password-error');
+      errorDiv.textContent = 'Passwords do not match';
+      errorDiv.style.display = 'block';
+      return;
+    }
+
+    if (password.length < 8) {
+      const errorDiv = document.getElementById('password-error');
+      errorDiv.textContent = 'Password must be at least 8 characters';
+      errorDiv.style.display = 'block';
+      return;
+    }
+
+    if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
+      const errorDiv = document.getElementById('password-error');
+      errorDiv.textContent = 'Password must contain at least one letter and one number';
+      errorDiv.style.display = 'block';
+      return;
+    }
+
+    const button = document.getElementById('setup-password-btn');
+    const originalText = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Setting up...';
+
+    try {
+      const response = await fetch('{{ .PasswordSetupURL }}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_id: userID,
+          password: password
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to set password');
+      }
+
+      // Success!
+      passwordSetup = true;
+      document.getElementById('password-success').style.display = 'block';
+      document.getElementById('password-error').style.display = 'none';
+      button.textContent = '✓ Password Set Up';
+      button.style.backgroundColor = '#4CAF50';
+
+      // Clear form
+      document.getElementById('password').value = '';
+      document.getElementById('password-confirm').value = '';
+
+      checkSetupComplete();
+
+    } catch (error) {
+      console.error('Password setup error:', error);
+
+      const errorDiv = document.getElementById('password-error');
+      errorDiv.textContent = error.message || 'Failed to set up password. Please try again.';
+      errorDiv.style.display = 'block';
+
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  });
+
+  // Setup Both Handler
+  document.getElementById('setup-both-btn').addEventListener('click', function(e) {
+    e.preventDefault();
+
+    if (!passkeySetup) {
+      document.getElementById('setup-passkey-btn').click();
+    }
+
+    // Note: User will need to set password manually after passkey
+    alert('Please set up your passkey first, then set up your password below.');
+  });
+
+  // Continue Handler
+  document.getElementById('continue-btn').addEventListener('click', function(e) {
+    e.preventDefault();
+    window.location.href = '{{ .ContinueURL }}';
+  });
+
+  // Check if setup is complete
+  function checkSetupComplete() {
+    if (passkeySetup || passwordSetup) {
+      document.getElementById('continue-section').style.display = 'block';
+    }
+  }
+
+  // Helper function to convert ArrayBuffer to Base64
+  function arrayBufferToBase64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+  }
+</script>
+
+{{ template "footer.html" . }}

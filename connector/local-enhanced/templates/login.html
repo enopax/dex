@@ -1,0 +1,226 @@
+{{ template "header.html" . }}
+
+<div class="theme-panel">
+  <h2 class="theme-heading">Log in to Your Account</h2>
+
+  <!-- Passkey Login (Primary Option) -->
+  {{ if .PasskeyEnabled }}
+  <div class="theme-form-row">
+    <button id="passkey-login-btn" class="dex-btn theme-btn--primary" style="width: 100%;">
+      <span class="dex-btn-text">🔐 Login with Passkey</span>
+    </button>
+  </div>
+
+  <div class="theme-divider" style="margin: 20px 0; text-align: center; color: #666;">
+    <span>or</span>
+  </div>
+  {{ end }}
+
+  <!-- Password Login Form -->
+  <form method="post" action="{{ .PostURL }}" id="password-form">
+    <div class="theme-form-row">
+      <div class="theme-form-label">
+        <label for="login">{{ .UsernamePrompt }}</label>
+      </div>
+      <input
+        tabindex="1"
+        required
+        id="login"
+        name="login"
+        type="text"
+        class="theme-form-input"
+        placeholder="{{ .UsernamePrompt | lower }}"
+        {{ if .Username }} value="{{ .Username }}" {{ else }} autofocus {{ end }}
+      />
+    </div>
+
+    <div class="theme-form-row">
+      <div class="theme-form-label">
+        <label for="password">Password</label>
+      </div>
+      <input
+        tabindex="2"
+        required
+        id="password"
+        name="password"
+        type="password"
+        class="theme-form-input"
+        placeholder="password"
+        {{ if .Invalid }} autofocus {{ end }}
+      />
+    </div>
+
+    {{ if .Invalid }}
+    <div id="login-error" class="dex-error-box">
+      Invalid {{ .UsernamePrompt }} and password.
+    </div>
+    {{ end }}
+
+    <div id="passkey-error" class="dex-error-box" style="display: none;"></div>
+
+    <button tabindex="3" id="submit-login" type="submit" class="dex-btn theme-btn--primary">
+      Login with Password
+    </button>
+  </form>
+
+  {{ if .MagicLinkEnabled }}
+  <div class="theme-form-row" style="margin-top: 20px;">
+    <button id="magic-link-btn" class="dex-btn theme-btn--secondary" style="width: 100%;">
+      <span class="dex-btn-text">📧 Send Magic Link</span>
+    </button>
+  </div>
+  {{ end }}
+
+  {{ if .BackLink }}
+  <div class="theme-link-back">
+    <a class="dex-subtle-text" href="{{ .BackLink }}">Select another login method.</a>
+  </div>
+  {{ end }}
+</div>
+
+<script type="text/javascript">
+  // Disable submit button on form submission to prevent double-submit
+  document.querySelector('#password-form').onsubmit = function(e) {
+    var el = document.querySelector('#submit-login');
+    el.setAttribute('disabled', 'disabled');
+  };
+
+  {{ if .PasskeyEnabled }}
+  // Passkey Login Handler
+  document.getElementById('passkey-login-btn').addEventListener('click', async function(e) {
+    e.preventDefault();
+
+    const button = e.target.closest('button');
+    const originalText = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<span class="dex-btn-text">Authenticating...</span>';
+
+    try {
+      // Step 1: Begin passkey authentication
+      const beginResponse = await fetch('{{ .PasskeyBeginURL }}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: document.getElementById('login').value || ''
+        })
+      });
+
+      if (!beginResponse.ok) {
+        const error = await beginResponse.json();
+        throw new Error(error.message || 'Failed to begin authentication');
+      }
+
+      const { session_id, options } = await beginResponse.json();
+
+      // Step 2: Call WebAuthn API
+      const credential = await navigator.credentials.get({
+        publicKey: options.publicKey
+      });
+
+      if (!credential) {
+        throw new Error('No credential selected');
+      }
+
+      // Step 3: Finish passkey authentication
+      const finishResponse = await fetch('{{ .PasskeyFinishURL }}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_id: session_id,
+          credential: {
+            id: credential.id,
+            type: credential.type,
+            rawId: arrayBufferToBase64(credential.rawId),
+            response: {
+              clientDataJSON: arrayBufferToBase64(credential.response.clientDataJSON),
+              authenticatorData: arrayBufferToBase64(credential.response.authenticatorData),
+              signature: arrayBufferToBase64(credential.response.signature),
+              userHandle: credential.response.userHandle ? arrayBufferToBase64(credential.response.userHandle) : null
+            }
+          }
+        })
+      });
+
+      if (!finishResponse.ok) {
+        const error = await finishResponse.json();
+        throw new Error(error.message || 'Authentication failed');
+      }
+
+      const result = await finishResponse.json();
+
+      // Step 4: Redirect to OAuth callback
+      // The server should set up the session and redirect
+      window.location.href = '{{ .CallbackURL }}';
+
+    } catch (error) {
+      console.error('Passkey authentication error:', error);
+
+      const errorDiv = document.getElementById('passkey-error');
+      errorDiv.textContent = error.message || 'Passkey authentication failed. Please try password login.';
+      errorDiv.style.display = 'block';
+
+      button.disabled = false;
+      button.innerHTML = originalText;
+    }
+  });
+
+  // Helper function to convert ArrayBuffer to Base64
+  function arrayBufferToBase64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+  }
+  {{ end }}
+
+  {{ if .MagicLinkEnabled }}
+  // Magic Link Handler
+  document.getElementById('magic-link-btn').addEventListener('click', async function(e) {
+    e.preventDefault();
+
+    const email = document.getElementById('login').value;
+    if (!email) {
+      alert('Please enter your email address');
+      document.getElementById('login').focus();
+      return;
+    }
+
+    const button = e.target.closest('button');
+    const originalText = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<span class="dex-btn-text">Sending...</span>';
+
+    try {
+      const response = await fetch('{{ .MagicLinkSendURL }}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: email })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to send magic link');
+      }
+
+      alert('Magic link sent! Check your email.');
+
+    } catch (error) {
+      console.error('Magic link error:', error);
+      alert(error.message || 'Failed to send magic link. Please try again.');
+
+      button.disabled = false;
+      button.innerHTML = originalText;
+    }
+  });
+  {{ end }}
+</script>
+
+{{ template "footer.html" . }}
