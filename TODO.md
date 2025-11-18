@@ -450,55 +450,87 @@ This implementation plan covers building an **Enhanced Local Connector** for Dex
 
 ## Phase 3: TOTP 2FA
 
-### Week 8: TOTP Implementation
+### Week 8: TOTP Implementation (COMPLETE - 2025-11-18)
+
+**Status**: ✅ COMPLETE - TOTP implementation finished with comprehensive tests
 
 #### TOTP Setup
-- [ ] Integrate TOTP library:
-  ```go
-  import "github.com/pquerna/otp/totp"
+- [x] Integrate TOTP library:
+  - [x] Added `github.com/pquerna/otp v1.4.0` dependency
+  - [x] Added `github.com/skip2/go-qrcode v0.0.0-20200617195104` dependency
+  - [x] Implemented in `connector/local-enhanced/totp.go`
 
-  key, err := totp.Generate(totp.GenerateOpts{
-      Issuer:      "Enopax",
-      AccountName: user.Email,
-  })
-  ```
+- [x] Implement TOTP secret generation
+  - [x] `BeginTOTPSetup()` - Generates TOTP secret, QR code, and backup codes
+  - [x] Secret generation using `totp.Generate()` with 32-byte secret
+  - [x] Period: 30 seconds, Digits: 6, Algorithm: SHA1
 
-- [ ] Implement TOTP secret generation
-- [ ] Create QR code generation for enrollment
-- [ ] Add secret storage in user record
+- [x] Create QR code generation for enrollment
+  - [x] QR code generated as 256x256 PNG
+  - [x] Returned as base64-encoded data URL
+  - [x] Includes otpauth:// URL for manual entry
+
+- [x] Add secret storage in user record
+  - [x] User struct already has `TOTPSecret` and `TOTPEnabled` fields
+  - [x] Backup codes stored as hashed values in `BackupCodes` array
 
 #### TOTP Endpoints
-- [ ] Implement `POST /auth/totp/enable`:
-  ```go
-  func (c *Connector) EnableTOTP(w http.ResponseWriter, r *http.Request) {
-      // 1. Generate TOTP secret
-      // 2. Return secret and QR code
-      // 3. Wait for verification
-  }
-  ```
+- [x] Implement `POST /totp/enable` (handleTOTPEnable):
+  - [x] Validates user_id in request
+  - [x] Checks if TOTP already enabled
+  - [x] Calls BeginTOTPSetup to generate secret and QR code
+  - [x] Returns secret, QR code data URL, backup codes, and otpauth URL
 
-- [ ] Implement `POST /auth/totp/verify`:
-  ```go
-  func (c *Connector) VerifyTOTP(w http.ResponseWriter, r *http.Request) {
-      // 1. Get user's TOTP secret
-      // 2. Validate TOTP code
-      // 3. Mark TOTP as enabled
-  }
-  ```
+- [x] Implement `POST /totp/verify` (handleTOTPVerify):
+  - [x] Validates required fields (user_id, secret, code, backup_codes)
+  - [x] Calls FinishTOTPSetup to verify TOTP code
+  - [x] Hashes and stores backup codes
+  - [x] Enables TOTP for user
 
-- [ ] Implement `POST /auth/totp/validate` (during login):
-  ```go
-  func (c *Connector) ValidateTOTP(w http.ResponseWriter, r *http.Request) {
-      // 1. Get TOTP code from request
-      // 2. Validate against user's secret
-      // 3. Continue OAuth flow
-  }
-  ```
+- [x] Implement `POST /totp/validate` (handleTOTPValidate):
+  - [x] Validates user_id and code
+  - [x] Calls ValidateTOTP to check TOTP code
+  - [x] Falls back to ValidateBackupCode if TOTP fails
+  - [x] Returns validation result
 
-- [ ] Add rate limiting (prevent brute force)
-- [ ] Write tests
+- [x] Add rate limiting (prevent brute force)
+  - [x] Implemented `TOTPRateLimiter` with in-memory tracking
+  - [x] Limits: 5 attempts per 5 minutes per user
+  - [x] Automatic cleanup of expired attempts (every 10 minutes)
+  - [x] Reset on successful authentication
+  - [x] Per-user rate limiting (different users have separate limits)
 
-**Deliverable**: TOTP enrollment and validation working
+- [x] Write tests
+  - [x] `totp_test.go` with 8 test functions, 20+ sub-tests
+  - [x] Tests for BeginTOTPSetup (QR code, backup codes, secret)
+  - [x] Tests for FinishTOTPSetup (valid/invalid codes)
+  - [x] Tests for ValidateTOTP (valid/invalid codes, rate limiting, not enabled)
+  - [x] Tests for ValidateBackupCode (valid, already used, invalid, none)
+  - [x] Tests for DisableTOTP (successful, invalid code)
+  - [x] Tests for RegenerateBackupCodes (successful, invalid code)
+  - [x] Tests for TOTPRateLimiter (allow, reset, cleanup, per-user limits)
+  - [x] Tests for generateBackupCodes (count, length, uniqueness, no ambiguous chars)
+  - [x] All tests passing (6.2s total runtime)
+
+#### Additional Features Implemented
+- [x] Backup code system with hashing (bcrypt)
+  - [x] 10 backup codes per user
+  - [x] 8 characters each (uppercase alphanumeric)
+  - [x] No ambiguous characters (0, O, 1, I, L excluded)
+  - [x] One-time use with tracking (Used field and UsedAt timestamp)
+
+- [x] Password hashing utilities (password.go)
+  - [x] `hashPassword()` - bcrypt hashing
+  - [x] `verifyPassword()` - bcrypt verification
+  - [x] `SetPassword()` - set/update user password
+  - [x] `VerifyPassword()` - verify password during login
+  - [x] `RemovePassword()` - remove password (for passwordless accounts)
+
+- [x] TOTP management functions
+  - [x] `DisableTOTP()` - disable TOTP with verification
+  - [x] `RegenerateBackupCodes()` - generate new backup codes with verification
+
+**Deliverable**: ✅ TOTP enrollment and validation working, fully tested
 
 ---
 

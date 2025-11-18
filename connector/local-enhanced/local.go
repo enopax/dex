@@ -20,11 +20,12 @@ import (
 
 // Connector implements the connector.Connector and connector.PasswordConnector interfaces.
 type Connector struct {
-	config    *Config
-	storage   Storage
-	webAuthn  *webauthn.WebAuthn
-	logger    logrus.FieldLogger
-	templates *Templates
+	config          *Config
+	storage         Storage
+	webAuthn        *webauthn.WebAuthn
+	logger          logrus.FieldLogger
+	templates       *Templates
+	totpRateLimiter *TOTPRateLimiter
 }
 
 // New creates a new enhanced local connector.
@@ -51,12 +52,25 @@ func New(config *Config, logger logrus.FieldLogger) (*Connector, error) {
 		return nil, err
 	}
 
+	// Initialize TOTP rate limiter (5 attempts per 5 minutes)
+	totpRateLimiter := NewTOTPRateLimiter(5, 5*time.Minute)
+
+	// Start cleanup goroutine for rate limiter
+	go func() {
+		ticker := time.NewTicker(10 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			totpRateLimiter.Cleanup()
+		}
+	}()
+
 	return &Connector{
-		config:    config,
-		storage:   storage,
-		webAuthn:  webAuthn,
-		logger:    logger,
-		templates: templates,
+		config:          config,
+		storage:         storage,
+		webAuthn:        webAuthn,
+		logger:          logger,
+		templates:       templates,
+		totpRateLimiter: totpRateLimiter,
 	}, nil
 }
 

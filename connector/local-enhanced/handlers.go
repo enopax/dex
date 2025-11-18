@@ -527,22 +527,341 @@ func (c *Connector) handlePasskeyRegisterFinish(w http.ResponseWriter, r *http.R
 	c.logger.Infof("passkey registration complete for passkey %s (name: %s)", passkey.ID, passkey.Name)
 }
 
-// handleTOTPVerify verifies a TOTP code.
-func (c *Connector) handleTOTPVerify(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement in Phase 3 Week 8
-	http.Error(w, "Not implemented", http.StatusNotImplemented)
+// TOTPEnableBeginRequest represents the request body for beginning TOTP setup.
+type TOTPEnableBeginRequest struct {
+	// UserID is the ID of the user setting up TOTP
+	UserID string `json:"user_id"`
 }
 
-// handleTOTPEnable enables TOTP for a user.
+// TOTPEnableBeginResponse represents the response from beginning TOTP setup.
+type TOTPEnableBeginResponse struct {
+	// Secret is the TOTP secret (base32 encoded)
+	Secret string `json:"secret"`
+
+	// QRCodeDataURL is the data URL for the QR code image
+	QRCodeDataURL string `json:"qr_code_data_url"`
+
+	// BackupCodes is the list of backup codes (shown only once)
+	BackupCodes []string `json:"backup_codes"`
+
+	// URL is the otpauth:// URL for manual entry
+	URL string `json:"url"`
+}
+
+// handleTOTPEnable begins TOTP setup for a user.
+//
+// This endpoint:
+// 1. Validates the request
+// 2. Retrieves the user
+// 3. Calls BeginTOTPSetup to generate secret and QR code
+// 4. Returns the setup information
+//
+// Request body:
+//
+//	{
+//	  "user_id": "user-uuid"
+//	}
+//
+// Response:
+//
+//	{
+//	  "secret": "base32-encoded-secret",
+//	  "qr_code_data_url": "data:image/png;base64,...",
+//	  "backup_codes": ["CODE1234", "CODE5678", ...],
+//	  "url": "otpauth://totp/Enopax:user@example.com?secret=..."
+//	}
 func (c *Connector) handleTOTPEnable(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement in Phase 3 Week 8
-	http.Error(w, "Not implemented", http.StatusNotImplemented)
+	// Only accept POST requests
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse request body
+	var req TOTPEnableBeginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		c.logger.Errorf("failed to parse request body: %v", err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate user ID
+	if req.UserID == "" {
+		http.Error(w, "user_id is required", http.StatusBadRequest)
+		return
+	}
+
+	// Get user
+	ctx := r.Context()
+	user, err := c.storage.GetUser(ctx, req.UserID)
+	if err != nil {
+		c.logger.Errorf("failed to get user: %v", err)
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	// Check if TOTP is already enabled
+	if user.TOTPEnabled {
+		http.Error(w, "TOTP is already enabled for this user", http.StatusBadRequest)
+		return
+	}
+
+	// Begin TOTP setup
+	setup, err := c.BeginTOTPSetup(ctx, user)
+	if err != nil {
+		c.logger.Errorf("failed to begin TOTP setup: %v", err)
+		http.Error(w, "Failed to begin TOTP setup", http.StatusInternalServerError)
+		return
+	}
+
+	// Prepare response
+	resp := TOTPEnableBeginResponse{
+		Secret:        setup.Secret,
+		QRCodeDataURL: setup.QRCodeDataURL,
+		BackupCodes:   setup.BackupCodes,
+		URL:           setup.URL,
+	}
+
+	// Send response
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		c.logger.Errorf("failed to encode response: %v", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
+
+	c.logger.Infof("TOTP setup initiated for user %s", user.ID)
 }
 
-// handleTOTPValidate validates a TOTP code during login.
+// TOTPVerifyRequest represents the request body for verifying TOTP setup.
+type TOTPVerifyRequest struct {
+	// UserID is the ID of the user completing TOTP setup
+	UserID string `json:"user_id"`
+
+	// Secret is the TOTP secret from the enable endpoint
+	Secret string `json:"secret"`
+
+	// Code is the TOTP code from the user's authenticator app
+	Code string `json:"code"`
+
+	// BackupCodes is the list of backup codes from the enable endpoint
+	BackupCodes []string `json:"backup_codes"`
+}
+
+// TOTPVerifyResponse represents the response from verifying TOTP setup.
+type TOTPVerifyResponse struct {
+	// Success indicates whether TOTP was enabled successfully
+	Success bool `json:"success"`
+
+	// Message provides additional information
+	Message string `json:"message,omitempty"`
+}
+
+// handleTOTPVerify completes TOTP setup by verifying the user's TOTP code.
+//
+// This endpoint:
+// 1. Validates the request
+// 2. Retrieves the user
+// 3. Calls FinishTOTPSetup to verify the code and enable TOTP
+// 4. Returns success
+//
+// Request body:
+//
+//	{
+//	  "user_id": "user-uuid",
+//	  "secret": "base32-encoded-secret",
+//	  "code": "123456",
+//	  "backup_codes": ["CODE1234", "CODE5678", ...]
+//	}
+//
+// Response:
+//
+//	{
+//	  "success": true,
+//	  "message": "TOTP enabled successfully"
+//	}
+func (c *Connector) handleTOTPVerify(w http.ResponseWriter, r *http.Request) {
+	// Only accept POST requests
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse request body
+	var req TOTPVerifyRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		c.logger.Errorf("failed to parse request body: %v", err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate required fields
+	if req.UserID == "" {
+		http.Error(w, "user_id is required", http.StatusBadRequest)
+		return
+	}
+	if req.Secret == "" {
+		http.Error(w, "secret is required", http.StatusBadRequest)
+		return
+	}
+	if req.Code == "" {
+		http.Error(w, "code is required", http.StatusBadRequest)
+		return
+	}
+	if len(req.BackupCodes) == 0 {
+		http.Error(w, "backup_codes is required", http.StatusBadRequest)
+		return
+	}
+
+	// Get user
+	ctx := r.Context()
+	user, err := c.storage.GetUser(ctx, req.UserID)
+	if err != nil {
+		c.logger.Errorf("failed to get user: %v", err)
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	// Finish TOTP setup
+	if err := c.FinishTOTPSetup(ctx, user, req.Secret, req.Code, req.BackupCodes); err != nil {
+		c.logger.Errorf("failed to finish TOTP setup: %v", err)
+
+		// Provide specific error messages
+		if err.Error() == "invalid TOTP code" {
+			http.Error(w, "Invalid TOTP code", http.StatusBadRequest)
+		} else {
+			http.Error(w, "Failed to enable TOTP", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Prepare response
+	resp := TOTPVerifyResponse{
+		Success: true,
+		Message: "TOTP enabled successfully",
+	}
+
+	// Send response
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		c.logger.Errorf("failed to encode response: %v", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
+
+	c.logger.Infof("TOTP enabled for user %s", user.ID)
+}
+
+// TOTPValidateRequest represents the request body for validating a TOTP code during login.
+type TOTPValidateRequest struct {
+	// UserID is the ID of the user being authenticated
+	UserID string `json:"user_id"`
+
+	// Code is the TOTP code from the user's authenticator app or a backup code
+	Code string `json:"code"`
+}
+
+// TOTPValidateResponse represents the response from validating a TOTP code.
+type TOTPValidateResponse struct {
+	// Valid indicates whether the TOTP code is valid
+	Valid bool `json:"valid"`
+
+	// Message provides additional information
+	Message string `json:"message,omitempty"`
+}
+
+// handleTOTPValidate validates a TOTP code during login (2FA flow).
+//
+// This endpoint:
+// 1. Validates the request
+// 2. Retrieves the user
+// 3. Attempts to validate as TOTP code first
+// 4. If TOTP fails, attempts to validate as backup code
+// 5. Returns validation result
+//
+// Request body:
+//
+//	{
+//	  "user_id": "user-uuid",
+//	  "code": "123456"  // or backup code
+//	}
+//
+// Response:
+//
+//	{
+//	  "valid": true,
+//	  "message": "TOTP code verified"
+//	}
 func (c *Connector) handleTOTPValidate(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement in Phase 3 Week 9
-	http.Error(w, "Not implemented", http.StatusNotImplemented)
+	// Only accept POST requests
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse request body
+	var req TOTPValidateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		c.logger.Errorf("failed to parse request body: %v", err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate required fields
+	if req.UserID == "" {
+		http.Error(w, "user_id is required", http.StatusBadRequest)
+		return
+	}
+	if req.Code == "" {
+		http.Error(w, "code is required", http.StatusBadRequest)
+		return
+	}
+
+	// Get user
+	ctx := r.Context()
+	user, err := c.storage.GetUser(ctx, req.UserID)
+	if err != nil {
+		c.logger.Errorf("failed to get user: %v", err)
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	var valid bool
+	var message string
+
+	// Try TOTP validation first
+	valid, err = c.ValidateTOTP(ctx, user, req.Code)
+	if err == nil && valid {
+		message = "TOTP code verified"
+	} else {
+		// If TOTP validation fails, try backup code
+		valid, err = c.ValidateBackupCode(ctx, user, req.Code)
+		if err == nil && valid {
+			message = "Backup code verified"
+		} else {
+			message = "Invalid code"
+		}
+	}
+
+	// Prepare response
+	resp := TOTPValidateResponse{
+		Valid:   valid,
+		Message: message,
+	}
+
+	// Send response
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		c.logger.Errorf("failed to encode response: %v", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
+
+	if valid {
+		c.logger.Infof("TOTP validation successful for user %s", user.ID)
+	} else {
+		c.logger.Warnf("TOTP validation failed for user %s", user.ID)
+	}
 }
 
 // handleMagicLinkSend sends a magic link to the user's email.
