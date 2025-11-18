@@ -132,6 +132,20 @@ testrace: ## Test go code and check for possible race conditions.
 
 testall: testrace ## Run all tests for go code.
 
+.PHONY: test-local-enhanced
+test-local-enhanced: ## Run tests for enhanced local connector only.
+	@go test -v ./connector/local-enhanced/...
+
+.PHONY: test-local-enhanced-coverage
+test-local-enhanced-coverage: ## Run enhanced local connector tests with coverage.
+	@go test -v -coverprofile=coverage-local-enhanced.out ./connector/local-enhanced/...
+	@go tool cover -html=coverage-local-enhanced.out -o coverage-local-enhanced.html
+	@echo "Coverage report generated: coverage-local-enhanced.html"
+
+.PHONY: test-local-enhanced-race
+test-local-enhanced-race: ## Run enhanced local connector tests with race detection.
+	@go test -v --race ./connector/local-enhanced/...
+
 .PHONY: lint
 lint: ## Run linter.
 	@golangci-lint version

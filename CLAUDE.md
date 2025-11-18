@@ -560,6 +560,117 @@ type User struct {
 
 ---
 
+## Testing Infrastructure
+
+### Testing Utilities
+
+The enhanced local connector has comprehensive testing utilities in `connector/local-enhanced/testing.go`:
+
+**Test Helpers**:
+- `DefaultTestConfig(t)` - Creates a default test configuration with temporary storage
+- `TestLogger(t)` - Creates a logger suitable for testing
+- `SetupTestStorage(t)` - Sets up temporary storage directories
+- `CleanupTestStorage(t, dataDir)` - Cleans up test storage
+- `TestContext(t)` - Creates a context with 30-second timeout
+- `WithTestTimeout(t, timeout, f)` - Runs a function with timeout to detect deadlocks
+
+**Test Data Generators**:
+- `NewTestUser(email)` - Creates a test user with default settings
+- `NewTestPasskey(userID, name)` - Creates a test passkey credential
+- `NewTestWebAuthnSession(userID, operation, ttl)` - Creates a test WebAuthn session
+- `NewTestMagicLinkToken(userID, email, ttl)` - Creates a test magic link token
+- `GenerateTestBackupCodes(count)` - Generates backup codes
+
+**Assertion Helpers**:
+- `AssertFileExists(t, path)` - Checks if file exists
+- `AssertFileNotExists(t, path)` - Checks if file does not exist
+- `AssertFilePermissions(t, path, perm)` - Verifies file permissions
+- `AssertDirPermissions(t, path, perm)` - Verifies directory permissions
+
+**Mock Objects**:
+- `MockEmailSender` - Mock email sender for testing magic links
+
+### Running Tests
+
+```bash
+# Run all tests
+make test
+
+# Run only enhanced local connector tests
+make test-local-enhanced
+
+# Run with coverage report
+make test-local-enhanced-coverage
+
+# Run with race detection
+make test-local-enhanced-race
+
+# Run specific test
+go test -run TestBeginPasskeyRegistration ./connector/local-enhanced/
+```
+
+### Writing Tests
+
+**Basic Test Structure**:
+```go
+func TestFeatureName(t *testing.T) {
+    // Setup
+    config := DefaultTestConfig(t)
+    defer CleanupTestStorage(t, config.DataDir)
+
+    ctx := TestContext(t)
+    user := NewTestUser("test@example.com")
+
+    // Test logic here
+
+    // Assertions
+    assert.NotNil(t, result)
+    require.NoError(t, err)
+}
+```
+
+**Using Test Helpers**:
+```go
+func TestStorageOperations(t *testing.T) {
+    // Create storage
+    dataDir := SetupTestStorage(t)
+    defer CleanupTestStorage(t, dataDir)
+
+    // Create test data
+    user := NewTestUser("alice@example.com")
+    passkey := NewTestPasskey(user.ID, "My Security Key")
+
+    // Test with timeout
+    WithTestTimeout(t, 5*time.Second, func() {
+        // ... test code that might deadlock
+    })
+}
+```
+
+**Testing Email Sending**:
+```go
+func TestMagicLinkEmail(t *testing.T) {
+    emailSender := NewMockEmailSender()
+
+    // Trigger email send
+    err := SendMagicLink(emailSender, "user@example.com")
+    require.NoError(t, err)
+
+    // Verify email was sent
+    lastEmail := emailSender.GetLastEmail()
+    assert.Equal(t, "user@example.com", lastEmail.To)
+    assert.Contains(t, lastEmail.Body, "magic link")
+}
+```
+
+### Test Coverage Goals
+
+- **Unit Tests**: Minimum 80% coverage
+- **Integration Tests**: All major authentication flows
+- **End-to-End Tests**: Critical user journeys
+
+---
+
 ## Best Practices
 
 ### Security
