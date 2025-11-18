@@ -149,6 +149,13 @@ func (c *Connector) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("/totp/enable", c.handleTOTPEnable)
 	mux.HandleFunc("/totp/validate", c.handleTOTPValidate)
 
+	// 2FA flow
+	mux.HandleFunc("/2fa/prompt", c.handle2FAPrompt)
+	mux.HandleFunc("/2fa/verify/totp", c.handle2FAVerifyTOTP)
+	mux.HandleFunc("/2fa/verify/backup-code", c.handle2FAVerifyBackupCode)
+	mux.HandleFunc("/2fa/verify/passkey/begin", c.handle2FAVerifyPasskeyBegin)
+	mux.HandleFunc("/2fa/verify/passkey/finish", c.handle2FAVerifyPasskeyFinish)
+
 	// Magic link
 	mux.HandleFunc("/magic-link/send", c.handleMagicLinkSend)
 	mux.HandleFunc("/magic-link/verify", c.handleMagicLinkVerify)

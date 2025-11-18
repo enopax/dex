@@ -67,6 +67,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Nix flake configuration for reproducible development environment
   - Make targets for testing: `test-local-enhanced`, `test-local-enhanced-coverage`, `test-local-enhanced-race`
 
+- **2FA Flow Integration** (2025-11-18)
+  - Multi-step two-factor authentication flow
+  - TwoFactorSession structure with 10-minute TTL
+  - `Begin2FA()` creates session after primary authentication
+  - `Complete2FA()` marks session complete and returns user ID
+  - Policy enforcement via `Require2FAForUser()` function
+  - Grace period support via `InGracePeriod()` function
+  - Available methods detection via `GetAvailable2FAMethods()` function
+  - 2FA prompt HTML template (`templates/twofa-prompt.html`)
+  - HTTP handlers for 2FA verification:
+    - `GET /2fa/prompt` - Shows 2FA prompt page
+    - `POST /2fa/verify/totp` - Verifies TOTP code
+    - `POST /2fa/verify/backup-code` - Verifies backup code
+    - `POST /2fa/verify/passkey/begin` - Begins passkey 2FA
+    - `POST /2fa/verify/passkey/finish` - Completes passkey 2FA
+  - 2FA session storage in `2fa-sessions/` directory
+  - Updated `CleanupExpiredSessions()` to clean 2FA sessions
+  - OAuth state preservation across 2FA flow
+  - Security features: one-time use sessions, rate limiting, user ID verification
+  - Location: `connector/local-enhanced/twofa.go`, `handlers.go`, `templates/twofa-prompt.html`
+
 ### Changed
 - None
 

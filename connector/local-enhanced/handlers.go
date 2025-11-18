@@ -3,6 +3,7 @@ package local
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/go-webauthn/webauthn/protocol"
@@ -917,4 +918,303 @@ func (c *Connector) parseCredentialAssertionResponse(credentialJSON json.RawMess
 	}
 
 	return car, nil
+}
+
+// handle2FAPrompt shows the 2FA prompt page.
+//
+// This is called after successful primary authentication (password or passwordless).
+// The user must complete a second factor (TOTP, passkey, or backup code) before
+// being redirected to the OAuth callback.
+func (c *Connector) handle2FAPrompt(w http.ResponseWriter, r *http.Request) {
+	// Get session ID from query parameter
+	sessionID := r.URL.Query().Get("session_id")
+	if sessionID == "" {
+		http.Error(w, "Missing session_id parameter", http.StatusBadRequest)
+		return
+	}
+
+	// Get 2FA session
+	ctx := r.Context()
+	session, err := c.storage.Get2FASession(ctx, sessionID)
+	if err != nil {
+		c.logger.Errorf("handle2FAPrompt: failed to get session: %v", err)
+		http.Error(w, "Invalid or expired 2FA session", http.StatusUnauthorized)
+		return
+	}
+
+	// Get user
+	user, err := c.storage.GetUser(ctx, session.UserID)
+	if err != nil {
+		c.logger.Errorf("handle2FAPrompt: failed to get user: %v", err)
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	// Get available 2FA methods
+	availableMethods := c.GetAvailable2FAMethods(ctx, user, session.PrimaryMethod)
+
+	// Render 2FA prompt template
+	data := struct {
+		SessionID           string
+		AvailableMethods    []string
+		CallbackURL         string
+		State               string
+		TOTPVerifyURL       string
+		BackupCodeVerifyURL string
+		PasskeyBeginURL     string
+		PasskeyFinishURL    string
+		BackLink            string
+		Invalid             bool
+	}{
+		SessionID:           sessionID,
+		AvailableMethods:    availableMethods,
+		CallbackURL:         session.CallbackURL,
+		State:               session.State,
+		TOTPVerifyURL:       "/2fa/verify/totp",
+		BackupCodeVerifyURL: "/2fa/verify/backup-code",
+		PasskeyBeginURL:     "/2fa/verify/passkey/begin",
+		PasskeyFinishURL:    "/2fa/verify/passkey/finish",
+		BackLink:            "/login",
+		Invalid:             r.URL.Query().Get("error") == "invalid",
+	}
+
+	// TODO: Render template with data
+	// For now, return JSON (template implementation pending)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(data)
+}
+
+// handle2FAVerifyTOTP verifies a TOTP code for 2FA.
+func (c *Connector) handle2FAVerifyTOTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse form
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	sessionID := r.FormValue("session_id")
+	code := r.FormValue("code")
+	callbackURL := r.FormValue("callback")
+	state := r.FormValue("state")
+
+	if sessionID == "" || code == "" {
+		http.Error(w, "Missing required fields", http.StatusBadRequest)
+		return
+	}
+
+	// Validate 2FA method
+	ctx := r.Context()
+	valid, err := c.Validate2FAMethod(ctx, sessionID, "totp", code)
+	if err != nil {
+		c.logger.Errorf("handle2FAVerifyTOTP: validation failed: %v", err)
+		http.Redirect(w, r, fmt.Sprintf("/2fa/prompt?session_id=%s&error=invalid", sessionID), http.StatusSeeOther)
+		return
+	}
+
+	if !valid {
+		c.logger.Warnf("handle2FAVerifyTOTP: invalid TOTP code for session %s", sessionID)
+		http.Redirect(w, r, fmt.Sprintf("/2fa/prompt?session_id=%s&error=invalid", sessionID), http.StatusSeeOther)
+		return
+	}
+
+	// Complete 2FA
+	userID, _, _, err := c.Complete2FA(ctx, sessionID)
+	if err != nil {
+		c.logger.Errorf("handle2FAVerifyTOTP: failed to complete 2FA: %v", err)
+		http.Error(w, "Failed to complete 2FA", http.StatusInternalServerError)
+		return
+	}
+
+	c.logger.Infof("handle2FAVerifyTOTP: 2FA completed for user %s", userID)
+
+	// Redirect to OAuth callback
+	redirectURL := fmt.Sprintf("%s?state=%s&user_id=%s", callbackURL, state, userID)
+	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+}
+
+// handle2FAVerifyBackupCode verifies a backup code for 2FA.
+func (c *Connector) handle2FAVerifyBackupCode(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse form
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	sessionID := r.FormValue("session_id")
+	code := r.FormValue("code")
+	callbackURL := r.FormValue("callback")
+	state := r.FormValue("state")
+
+	if sessionID == "" || code == "" {
+		http.Error(w, "Missing required fields", http.StatusBadRequest)
+		return
+	}
+
+	// Validate 2FA method
+	ctx := r.Context()
+	valid, err := c.Validate2FAMethod(ctx, sessionID, "backup_code", code)
+	if err != nil {
+		c.logger.Errorf("handle2FAVerifyBackupCode: validation failed: %v", err)
+		http.Redirect(w, r, fmt.Sprintf("/2fa/prompt?session_id=%s&error=invalid", sessionID), http.StatusSeeOther)
+		return
+	}
+
+	if !valid {
+		c.logger.Warnf("handle2FAVerifyBackupCode: invalid backup code for session %s", sessionID)
+		http.Redirect(w, r, fmt.Sprintf("/2fa/prompt?session_id=%s&error=invalid", sessionID), http.StatusSeeOther)
+		return
+	}
+
+	// Complete 2FA
+	userID, _, _, err := c.Complete2FA(ctx, sessionID)
+	if err != nil {
+		c.logger.Errorf("handle2FAVerifyBackupCode: failed to complete 2FA: %v", err)
+		http.Error(w, "Failed to complete 2FA", http.StatusInternalServerError)
+		return
+	}
+
+	c.logger.Infof("handle2FAVerifyBackupCode: 2FA completed for user %s", userID)
+
+	// Redirect to OAuth callback
+	redirectURL := fmt.Sprintf("%s?state=%s&user_id=%s", callbackURL, state, userID)
+	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+}
+
+// handle2FAVerifyPasskeyBegin begins passkey verification for 2FA.
+func (c *Connector) handle2FAVerifyPasskeyBegin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse request
+	var req struct {
+		SessionID string `json:"session_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.SessionID == "" {
+		http.Error(w, "Missing session_id", http.StatusBadRequest)
+		return
+	}
+
+	// Get 2FA session
+	ctx := r.Context()
+	session, err := c.storage.Get2FASession(ctx, req.SessionID)
+	if err != nil {
+		c.logger.Errorf("handle2FAVerifyPasskeyBegin: failed to get session: %v", err)
+		http.Error(w, "Invalid or expired 2FA session", http.StatusUnauthorized)
+		return
+	}
+
+	// Get user
+	user, err := c.storage.GetUser(ctx, session.UserID)
+	if err != nil {
+		c.logger.Errorf("handle2FAVerifyPasskeyBegin: failed to get user: %v", err)
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	// Begin passkey authentication
+	webauthnSession, options, err := c.BeginPasskeyAuthentication(ctx, user.Email)
+	if err != nil {
+		c.logger.Errorf("handle2FAVerifyPasskeyBegin: failed to begin passkey auth: %v", err)
+		http.Error(w, "Failed to begin passkey verification", http.StatusInternalServerError)
+		return
+	}
+
+	c.logger.Infof("handle2FAVerifyPasskeyBegin: created passkey challenge for 2FA session %s", req.SessionID)
+
+	// Return options
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"session_id": webauthnSession.SessionID,
+		"options":    options,
+	})
+}
+
+// handle2FAVerifyPasskeyFinish completes passkey verification for 2FA.
+func (c *Connector) handle2FAVerifyPasskeyFinish(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse request
+	var req struct {
+		SessionID         string          `json:"session_id"`
+		WebAuthnSessionID string          `json:"webauthn_session_id"`
+		Credential        json.RawMessage `json:"credential"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.SessionID == "" || req.WebAuthnSessionID == "" {
+		http.Error(w, "Missing required fields", http.StatusBadRequest)
+		return
+	}
+
+	// Get 2FA session
+	ctx := r.Context()
+	session, err := c.storage.Get2FASession(ctx, req.SessionID)
+	if err != nil {
+		c.logger.Errorf("handle2FAVerifyPasskeyFinish: failed to get session: %v", err)
+		http.Error(w, "Invalid or expired 2FA session", http.StatusUnauthorized)
+		return
+	}
+
+	// Parse credential assertion response
+	parsedResponse, err := c.parseCredentialAssertionResponse(req.Credential)
+	if err != nil {
+		c.logger.Errorf("handle2FAVerifyPasskeyFinish: failed to parse credential: %v", err)
+		http.Error(w, "Invalid credential format", http.StatusBadRequest)
+		return
+	}
+
+	// Finish passkey authentication
+	user, _, err := c.FinishPasskeyAuthentication(ctx, req.WebAuthnSessionID, parsedResponse)
+	if err != nil {
+		c.logger.Errorf("handle2FAVerifyPasskeyFinish: authentication failed: %v", err)
+		http.Error(w, "Passkey verification failed", http.StatusUnauthorized)
+		return
+	}
+
+	// Verify this is the same user as in the 2FA session
+	if user.ID != session.UserID {
+		c.logger.Errorf("handle2FAVerifyPasskeyFinish: user mismatch (expected %s, got %s)", session.UserID, user.ID)
+		http.Error(w, "User mismatch", http.StatusForbidden)
+		return
+	}
+
+	// Complete 2FA
+	_, _, _, err = c.Complete2FA(ctx, req.SessionID)
+	if err != nil {
+		c.logger.Errorf("handle2FAVerifyPasskeyFinish: failed to complete 2FA: %v", err)
+		http.Error(w, "Failed to complete 2FA", http.StatusInternalServerError)
+		return
+	}
+
+	c.logger.Infof("handle2FAVerifyPasskeyFinish: 2FA completed for user %s", user.ID)
+
+	// Return success
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"user_id": user.ID,
+	})
 }

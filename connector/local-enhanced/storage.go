@@ -30,6 +30,9 @@ var (
 
 	// ErrTokenNotFound is returned when a token is not found.
 	ErrTokenNotFound = errors.New("token not found")
+
+	// Err2FASessionNotFound is returned when a 2FA session is not found.
+	Err2FASessionNotFound = errors.New("2FA session not found")
 )
 
 // Storage defines the interface for user and credential storage.
@@ -58,6 +61,11 @@ type Storage interface {
 	GetMagicLinkToken(ctx context.Context, token string) (*MagicLinkToken, error)
 	DeleteMagicLinkToken(ctx context.Context, token string) error
 
+	// 2FA session operations
+	Save2FASession(ctx context.Context, session *TwoFactorSession) error
+	Get2FASession(ctx context.Context, sessionID string) (*TwoFactorSession, error)
+	Delete2FASession(ctx context.Context, sessionID string) error
+
 	// Cleanup operations
 	CleanupExpiredSessions(ctx context.Context) error
 	CleanupExpiredTokens(ctx context.Context) error
@@ -77,6 +85,7 @@ func NewFileStorage(dataDir string) (*FileStorage, error) {
 		filepath.Join(dataDir, "passkeys"),
 		filepath.Join(dataDir, "sessions"),
 		filepath.Join(dataDir, "tokens"),
+		filepath.Join(dataDir, "2fa-sessions"),
 	}
 
 	for _, dir := range dirs {
@@ -372,20 +381,68 @@ func (s *FileStorage) DeleteMagicLinkToken(ctx context.Context, token string) er
 	return os.Remove(tokenPath)
 }
 
+// 2FA session operations
+
+// Save2FASession saves a 2FA session.
+func (s *FileStorage) Save2FASession(ctx context.Context, session *TwoFactorSession) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	sessionPath := filepath.Join(s.dataDir, "2fa-sessions", session.SessionID+".json")
+	return s.writeFile(sessionPath, session)
+}
+
+// Get2FASession retrieves a 2FA session.
+func (s *FileStorage) Get2FASession(ctx context.Context, sessionID string) (*TwoFactorSession, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	sessionPath := filepath.Join(s.dataDir, "2fa-sessions", sessionID+".json")
+	var session TwoFactorSession
+	if err := s.readFile(sessionPath, &session); err != nil {
+		if os.IsNotExist(err) {
+			return nil, Err2FASessionNotFound
+		}
+		return nil, err
+	}
+
+	// Check if session is expired
+	if time.Now().After(session.ExpiresAt) {
+		return nil, Err2FASessionNotFound
+	}
+
+	return &session, nil
+}
+
+// Delete2FASession deletes a 2FA session.
+func (s *FileStorage) Delete2FASession(ctx context.Context, sessionID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	sessionPath := filepath.Join(s.dataDir, "2fa-sessions", sessionID+".json")
+	if _, err := os.Stat(sessionPath); os.IsNotExist(err) {
+		return nil // Already deleted
+	}
+
+	return os.Remove(sessionPath)
+}
+
 // Cleanup operations
 
-// CleanupExpiredSessions removes expired WebAuthn sessions.
+// CleanupExpiredSessions removes expired WebAuthn sessions and 2FA sessions.
 func (s *FileStorage) CleanupExpiredSessions(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	now := time.Now()
+
+	// Clean up WebAuthn sessions
 	sessionsDir := filepath.Join(s.dataDir, "sessions")
 	entries, err := os.ReadDir(sessionsDir)
 	if err != nil {
 		return fmt.Errorf("failed to read sessions directory: %w", err)
 	}
 
-	now := time.Now()
 	for _, entry := range entries {
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
 			continue
@@ -393,6 +450,29 @@ func (s *FileStorage) CleanupExpiredSessions(ctx context.Context) error {
 
 		sessionPath := filepath.Join(sessionsDir, entry.Name())
 		var session WebAuthnSession
+		if err := s.readFile(sessionPath, &session); err != nil {
+			continue
+		}
+
+		if now.After(session.ExpiresAt) {
+			os.Remove(sessionPath)
+		}
+	}
+
+	// Clean up 2FA sessions
+	twoFASessionsDir := filepath.Join(s.dataDir, "2fa-sessions")
+	entries2FA, err := os.ReadDir(twoFASessionsDir)
+	if err != nil {
+		return fmt.Errorf("failed to read 2fa-sessions directory: %w", err)
+	}
+
+	for _, entry := range entries2FA {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+
+		sessionPath := filepath.Join(twoFASessionsDir, entry.Name())
+		var session TwoFactorSession
 		if err := s.readFile(sessionPath, &session); err != nil {
 			continue
 		}

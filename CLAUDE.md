@@ -1243,6 +1243,194 @@ go tool cover -func=coverage.out | grep -E "(FinishPasskey|LoginURL|HandleCallba
 
 ---
 
+### 2FA Flow Integration (Phase 3 Week 9 - COMPLETE)
+
+**Purpose**: Implement multi-step two-factor authentication flow with policy enforcement.
+
+**Location**: `connector/local-enhanced/twofa.go`, `templates/twofa-prompt.html`, `handlers.go`
+
+#### 2FA Session Management
+
+**TwoFactorSession Structure**:
+```go
+type TwoFactorSession struct {
+    SessionID     string    // Unique session identifier
+    UserID        string    // User who completed primary auth
+    PrimaryMethod string    // Method used in step 1 (password, passkey, magic_link)
+    CreatedAt     time.Time
+    ExpiresAt     time.Time // 10-minute TTL
+    Completed     bool      // Marked true after 2FA validation
+    CallbackURL   string    // OAuth callback URL
+    State         string    // OAuth state parameter
+}
+```
+
+**2FA Flow**:
+1. **Primary Authentication**: User authenticates with password, passkey, or magic link
+2. **2FA Check**: `Require2FAForUser(user)` determines if 2FA is required
+3. **Session Creation**: `Begin2FA()` creates TwoFactorSession with 10-minute expiry
+4. **2FA Prompt**: User is redirected to `/2fa/prompt?session_id=...`
+5. **Second Factor**: User completes TOTP, passkey, or backup code verification
+6. **Completion**: `Complete2FA()` marks session complete and returns user ID
+7. **OAuth Redirect**: User is redirected to OAuth callback with user_id parameter
+
+#### Policy Enforcement
+
+**Require2FAForUser Function**:
+```go
+func (c *Connector) Require2FAForUser(ctx context.Context, user *User) bool
+```
+
+Checks if 2FA is required based on:
+- User-level `Require2FA` flag (per-user enforcement)
+- Global `TwoFactor.Required` config (organization-wide policy)
+- User has TOTP enabled (opt-in 2FA)
+- User has both password and passkey (2FA-capable, requires global config)
+
+**GetAvailable2FAMethods Function**:
+```go
+func (c *Connector) GetAvailable2FAMethods(ctx context.Context, user *User, primaryMethod string) []string
+```
+
+Returns available 2FA methods:
+- `"totp"` - If user has TOTP enabled and allowed in config
+- `"passkey"` - If user has passkeys AND passkey wasn't the primary method
+- `"backup_code"` - If user has unused backup codes
+
+**InGracePeriod Function**:
+```go
+func (c *Connector) InGracePeriod(ctx context.Context, user *User) bool
+```
+
+Checks if user is within grace period for 2FA setup:
+- Grace period defined in `TwoFactorConfig.GracePeriod` (seconds)
+- Grace period starts from user creation date
+- Expires once user sets up any 2FA method (TOTP or passkey)
+
+#### HTTP Endpoints
+
+**GET /2fa/prompt?session_id=...** (`handle2FAPrompt`):
+- Shows 2FA prompt page with available methods
+- Displays TOTP input, passkey button, and backup code option
+- Template: `templates/twofa-prompt.html`
+
+**POST /2fa/verify/totp** (`handle2FAVerifyTOTP`):
+- Verifies TOTP code
+- Form parameters: session_id, code, callback, state
+- Redirects to OAuth callback on success
+
+**POST /2fa/verify/backup-code** (`handle2FAVerifyBackupCode`):
+- Verifies backup code (8-character alphanumeric)
+- Marks backup code as used
+- Redirects to OAuth callback on success
+
+**POST /2fa/verify/passkey/begin** (`handle2FAVerifyPasskeyBegin`):
+- Begins WebAuthn passkey authentication for 2FA
+- Returns WebAuthn challenge and options
+- JSON request: `{"session_id": "..."}`
+
+**POST /2FA/verify/passkey/finish** (`handle2FAVerifyPasskeyFinish`):
+- Completes WebAuthn passkey authentication
+- Verifies signature and authenticator
+- Returns success with user_id
+- JSON request: `{"session_id": "...", "webauthn_session_id": "...", "credential": {...}}`
+
+#### 2FA Prompt Template
+
+**Location**: `templates/twofa-prompt.html`
+
+**Features**:
+- TOTP code input (6-digit, auto-focus)
+- Passkey verification button with WebAuthn JavaScript
+- Backup code collapsible section (8-character input)
+- Error handling and display
+- Responsive design using Dex theme classes
+
+**JavaScript Functionality**:
+- WebAuthn passkey verification flow
+- Base64 URL encoding/decoding helpers
+- Automatic uppercase conversion for backup codes
+- Form validation and submission
+
+#### Storage
+
+**2FA Session Operations**:
+- `Save2FASession(ctx, session)` - Stores session in `2fa-sessions/` directory
+- `Get2FASession(ctx, sessionID)` - Retrieves and validates session (checks expiry)
+- `Delete2FASession(ctx, sessionID)` - Removes session file
+
+**Cleanup**:
+- `CleanupExpiredSessions()` now cleans both WebAuthn and 2FA sessions
+- Expired sessions automatically removed during cleanup cycle
+
+#### Configuration
+
+**TwoFactorConfig** (in `config.go`):
+```yaml
+twoFactor:
+  required: false          # Global 2FA requirement
+  methods: [totp, passkey] # Allowed 2FA methods
+  gracePeriod: 604800      # Grace period in seconds (7 days)
+```
+
+#### Security Considerations
+
+**Session Security**:
+- 10-minute session expiry (shorter than primary auth)
+- One-time use (marked completed after validation)
+- Automatic cleanup 1 minute after completion
+- Session ID is cryptographically random (32 bytes)
+
+**Method Validation**:
+- TOTP validated via `ValidateTOTP()` with rate limiting
+- Backup codes hashed with bcrypt, marked used after validation
+- Passkey requires valid WebAuthn signature
+- User ID verified to match between primary and 2FA sessions
+
+**Anti-Replay**:
+- Sessions cannot be reused (completed flag)
+- Backup codes marked as used with timestamp
+- TOTP implements time-based validation (30-second window)
+
+#### Integration with OAuth Flow
+
+**Flow Diagram**:
+```
+User → Primary Auth → Require2FA? → Yes → Begin2FA → 2FA Prompt
+                              ↓
+                              No
+                              ↓
+                       OAuth Callback
+                              ↑
+                              |
+2FA Prompt → Validate → Complete2FA → OAuth Callback
+```
+
+**OAuth State Preservation**:
+- OAuth state and callback URL stored in TwoFactorSession
+- Preserved across 2FA prompt and verification
+- Passed to OAuth callback after successful 2FA
+
+#### Testing
+
+**Unit Tests** (to be implemented):
+- Begin2FA session creation
+- Complete2FA session validation
+- Require2FAForUser policy logic
+- GetAvailable2FAMethods filtering
+- InGracePeriod calculation
+
+**Integration Tests** (to be implemented):
+- Complete 2FA flow (password + TOTP)
+- Complete 2FA flow (password + passkey)
+- Complete 2FA flow (password + backup code)
+- Grace period enforcement
+- 2FA bypass for non-required users
+
+**Status**: ✅ 2FA flow implementation complete, testing pending
+
+---
+
 ### Go Code Standards
 
 **Imports**:

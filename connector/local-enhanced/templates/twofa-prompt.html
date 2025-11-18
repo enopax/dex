@@ -1,0 +1,226 @@
+{{ template "header.html" . }}
+
+<div class="theme-panel">
+    <h2 class="theme-heading">Two-Factor Authentication</h2>
+
+    <p class="dex-subtle-text">
+        Complete your login with a second authentication factor.
+    </p>
+
+    <!-- Error display -->
+    {{ if .Invalid }}
+    <div class="dex-error-box">
+        Invalid verification code. Please try again.
+    </div>
+    {{ end }}
+
+    <!-- TOTP verification (if available) -->
+    {{ if contains .AvailableMethods "totp" }}
+    <div class="theme-form-row">
+        <h3 class="theme-form-label">Authenticator App</h3>
+        <form id="totp-form" method="POST" action="{{ .TOTPVerifyURL }}">
+            <input type="hidden" name="session_id" value="{{ .SessionID }}">
+            <input type="hidden" name="callback" value="{{ .CallbackURL }}">
+            <input type="hidden" name="state" value="{{ .State }}">
+
+            <div class="theme-form-row">
+                <label class="theme-form-label" for="totp-code">6-digit code from your authenticator app</label>
+                <input
+                    type="text"
+                    id="totp-code"
+                    name="code"
+                    class="theme-form-input"
+                    placeholder="000000"
+                    maxlength="6"
+                    pattern="[0-9]{6}"
+                    autocomplete="one-time-code"
+                    autofocus
+                    required
+                >
+            </div>
+
+            <button type="submit" class="dex-btn theme-btn--primary">
+                Verify Code
+            </button>
+        </form>
+    </div>
+    {{ end }}
+
+    <!-- Passkey verification (if available) -->
+    {{ if contains .AvailableMethods "passkey" }}
+    <div class="theme-form-row" style="margin-top: 20px;">
+        <h3 class="theme-form-label">Security Key / Passkey</h3>
+        <button id="passkey-verify-btn" class="dex-btn theme-btn--primary" style="width: 100%;">
+            🔐 Verify with Passkey
+        </button>
+        <div id="passkey-error" class="dex-error-box" style="display: none; margin-top: 10px;"></div>
+    </div>
+    {{ end }}
+
+    <!-- Backup code option -->
+    {{ if contains .AvailableMethods "backup_code" }}
+    <div class="theme-form-row" style="margin-top: 20px;">
+        <details>
+            <summary class="dex-subtle-text" style="cursor: pointer; user-select: none;">
+                Use a backup code instead
+            </summary>
+            <form id="backup-code-form" method="POST" action="{{ .BackupCodeVerifyURL }}" style="margin-top: 10px;">
+                <input type="hidden" name="session_id" value="{{ .SessionID }}">
+                <input type="hidden" name="callback" value="{{ .CallbackURL }}">
+                <input type="hidden" name="state" value="{{ .State }}">
+
+                <div class="theme-form-row">
+                    <label class="theme-form-label" for="backup-code">8-character backup code</label>
+                    <input
+                        type="text"
+                        id="backup-code"
+                        name="code"
+                        class="theme-form-input"
+                        placeholder="ABCD1234"
+                        maxlength="8"
+                        pattern="[A-Z0-9]{8}"
+                        style="text-transform: uppercase;"
+                        required
+                    >
+                </div>
+
+                <button type="submit" class="dex-btn theme-btn--secondary">
+                    Verify Backup Code
+                </button>
+            </form>
+        </details>
+    </div>
+    {{ end }}
+
+    <!-- Back link -->
+    {{ if .BackLink }}
+    <div class="theme-form-row" style="margin-top: 30px;">
+        <a href="{{ .BackLink }}" class="dex-subtle-text">
+            ← Back to login
+        </a>
+    </div>
+    {{ end }}
+</div>
+
+<!-- Passkey verification JavaScript -->
+{{ if contains .AvailableMethods "passkey" }}
+<script>
+    // Base64 URL decoding helper
+    function base64UrlDecode(str) {
+        // Add padding
+        str = str.replace(/-/g, '+').replace(/_/g, '/');
+        while (str.length % 4) {
+            str += '=';
+        }
+        const binary = atob(str);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+        }
+        return bytes.buffer;
+    }
+
+    // Base64 URL encoding helper
+    function base64UrlEncode(buffer) {
+        const bytes = new Uint8Array(buffer);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary)
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=/g, '');
+    }
+
+    // Passkey verification handler
+    document.getElementById('passkey-verify-btn').addEventListener('click', async function() {
+        const errorDiv = document.getElementById('passkey-error');
+        errorDiv.style.display = 'none';
+
+        try {
+            // Step 1: Begin passkey authentication (2FA context)
+            const beginResponse = await fetch('{{ .PasskeyBeginURL }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    session_id: '{{ .SessionID }}'
+                })
+            });
+
+            if (!beginResponse.ok) {
+                throw new Error('Failed to begin passkey verification');
+            }
+
+            const beginData = await beginResponse.json();
+
+            // Step 2: Get credential from authenticator
+            const publicKey = beginData.options.publicKey;
+            publicKey.challenge = base64UrlDecode(publicKey.challenge);
+
+            if (publicKey.allowCredentials) {
+                publicKey.allowCredentials = publicKey.allowCredentials.map(cred => ({
+                    ...cred,
+                    id: base64UrlDecode(cred.id)
+                }));
+            }
+
+            const credential = await navigator.credentials.get({ publicKey });
+
+            // Step 3: Finish passkey authentication
+            const finishResponse = await fetch('{{ .PasskeyFinishURL }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    session_id: '{{ .SessionID }}',
+                    webauthn_session_id: beginData.session_id,
+                    credential: {
+                        id: credential.id,
+                        type: credential.type,
+                        rawId: base64UrlEncode(credential.rawId),
+                        response: {
+                            clientDataJSON: base64UrlEncode(credential.response.clientDataJSON),
+                            authenticatorData: base64UrlEncode(credential.response.authenticatorData),
+                            signature: base64UrlEncode(credential.response.signature),
+                            userHandle: credential.response.userHandle ? base64UrlEncode(credential.response.userHandle) : null
+                        }
+                    }
+                })
+            });
+
+            if (!finishResponse.ok) {
+                throw new Error('Passkey verification failed');
+            }
+
+            const finishData = await finishResponse.json();
+
+            // Step 4: Redirect to OAuth callback
+            window.location.href = '{{ .CallbackURL }}?state={{ .State }}&user_id=' + finishData.user_id;
+
+        } catch (error) {
+            console.error('Passkey verification error:', error);
+            errorDiv.textContent = 'Passkey verification failed: ' + error.message;
+            errorDiv.style.display = 'block';
+        }
+    });
+
+    // Auto-focus TOTP input on page load if TOTP is available
+    {{ if contains .AvailableMethods "totp" }}
+    document.getElementById('totp-code').focus();
+    {{ end }}
+
+    // Format backup code input to uppercase
+    const backupCodeInput = document.getElementById('backup-code');
+    if (backupCodeInput) {
+        backupCodeInput.addEventListener('input', function() {
+            this.value = this.value.toUpperCase();
+        });
+    }
+</script>
+{{ end }}
+
+{{ template "footer.html" . }}
