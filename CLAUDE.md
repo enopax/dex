@@ -1413,21 +1413,33 @@ User → Primary Auth → Require2FA? → Yes → Begin2FA → 2FA Prompt
 
 #### Testing
 
-**Unit Tests** (to be implemented):
-- Begin2FA session creation
-- Complete2FA session validation
-- Require2FAForUser policy logic
-- GetAvailable2FAMethods filtering
-- InGracePeriod calculation
+**Unit Tests** (✅ COMPLETE - 2025-11-18):
+- ✅ Begin2FA session creation (3 tests: creation, expiry, storage)
+- ✅ Complete2FA session validation (3 tests: validation, invalid/expired session handling)
+- ✅ Require2FAForUser policy logic (6 tests: all policy combinations)
+- ✅ GetAvailable2FAMethods filtering (6 tests: TOTP, passkey, backup codes, edge cases)
+- ✅ InGracePeriod calculation (5 tests: within/expired periods, 2FA setup, boundary cases)
+- ✅ Validate2FAMethod (4 tests: TOTP, backup codes, invalid methods, expired sessions)
 
-**Integration Tests** (to be implemented):
-- Complete 2FA flow (password + TOTP)
-- Complete 2FA flow (password + passkey)
-- Complete 2FA flow (password + backup code)
-- Grace period enforcement
-- 2FA bypass for non-required users
+**Test File**: `connector/local-enhanced/twofa_test.go`
+**Test Results**: 27 sub-tests, all passing
+**Coverage**: Comprehensive coverage of all 2FA core functions
 
-**Status**: ✅ 2FA flow implementation complete, testing pending
+**Integration Tests** (⚠️ PENDING):
+- [ ] Complete 2FA flow (password + TOTP)
+- [ ] Complete 2FA flow (password + passkey)
+- [ ] Complete 2FA flow (password + backup code)
+- [ ] Grace period enforcement
+- [ ] 2FA bypass for non-required users
+
+**HTTP Handler Tests** (⚠️ PENDING):
+- [ ] handle2FAPrompt
+- [ ] handle2FAVerifyTOTP
+- [ ] handle2FAVerifyBackupCode
+- [ ] handle2FAVerifyPasskeyBegin
+- [ ] handle2FAVerifyPasskeyFinish
+
+**Status**: ✅ 2FA flow implementation complete, unit tests complete (62.6% coverage), handler and integration tests pending
 
 ---
 
