@@ -3,20 +3,21 @@
 **Project**: Dex Fork with Enhanced Local Connector
 **Repository**: enopax/dex
 **Branch**: `feature/passkeys` (implementation), `main` (upstream-compatible)
-**Last Updated**: 2025-11-17
+**Last Updated**: 2025-11-18
 
 ---
 
 ## Table of Contents
 
 1. [Project Overview](#project-overview)
-2. [Repository Structure](#repository-structure)
-3. [Branch Strategy](#branch-strategy)
-4. [Development Workflow](#development-workflow)
-5. [Implementation Guidelines](#implementation-guidelines)
-6. [Testing Requirements](#testing-requirements)
-7. [Documentation Standards](#documentation-standards)
-8. [Best Practices](#best-practices)
+2. [Getting Started](#getting-started)
+3. [Repository Structure](#repository-structure)
+4. [Branch Strategy](#branch-strategy)
+5. [Development Workflow](#development-workflow)
+6. [Implementation Guidelines](#implementation-guidelines)
+7. [Testing Requirements](#testing-requirements)
+8. [Documentation Standards](#documentation-standards)
+9. [Best Practices](#best-practices)
 
 ---
 
@@ -70,11 +71,59 @@ Infrastructure Tools ←───────────┤
 
 ---
 
+## Getting Started
+
+### For New Developers
+
+If you're new to this project, **start here**:
+
+1. **Read this file (CLAUDE.md)** - Understand the project architecture and AI assistant workflows
+2. **Read DEVELOPMENT.md** - Set up your development environment (prerequisites, installation, building)
+3. **Read TODO.md** - Review the implementation plan and current progress
+4. **Read docs/enhancements/passkey-webauthn-support.md** - Understand the passkey concept and architecture
+
+### Quick Setup
+
+```bash
+# 1. Clone and navigate to the repository
+git clone https://github.com/enopax/dex.git
+cd dex
+
+# 2. Switch to feature branch
+git checkout feature/passkeys
+
+# 3. Install dependencies (choose one method)
+# Option A: Using Nix (recommended)
+nix develop
+
+# Option B: Manual installation
+make deps
+
+# 4. Build and run
+make build
+./bin/dex serve config.dev.yaml
+```
+
+**Full setup instructions**: See [DEVELOPMENT.md](./DEVELOPMENT.md)
+
+### Key Documentation Files
+
+| File | Purpose | When to Read |
+|------|---------|--------------|
+| **CLAUDE.md** (this file) | AI assistant guide, workflows, coding standards | Start here for overview |
+| **DEVELOPMENT.md** | Development environment setup, building, testing | Before writing code |
+| **TODO.md** | Implementation task list and timeline | Before starting a task |
+| **README.md** | Upstream Dex documentation | Understanding Dex basics |
+| **docs/enhancements/passkey-webauthn-support.md** | Passkey concept and architecture | Before implementing passkeys |
+
+---
+
 ## Repository Structure
 
 ```
 dex/
 ├── CLAUDE.md                    # This file - AI guidance
+├── DEVELOPMENT.md               # Development environment setup guide
 ├── TODO.md                      # Implementation task list
 ├── README.md                    # Original Dex README
 ├── docs/

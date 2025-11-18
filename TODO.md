@@ -117,8 +117,8 @@ This implementation plan covers building an **Enhanced Local Connector** for Dex
 ### Week 1: Project Setup
 
 #### Infrastructure
-- [ ] Create feature branch `feature/passkeys` (DONE)
-- [ ] Set up development environment documentation
+- [x] Create feature branch `feature/passkeys` (DONE)
+- [x] Set up development environment documentation
 - [ ] Configure Go module dependencies
 - [ ] Set up testing infrastructure
 
