@@ -2916,12 +2916,20 @@ chmod +x scripts/security-check.sh
      - `config.go` - Added HTTPS validation for RPOrigins
      - `config_test.go` - Added comprehensive HTTPS tests
 
-4. **User Enumeration via Error Messages** ⚠️
-   - **Issue**: "User not found" messages reveal email existence
-   - **Impact**: MEDIUM - Enables targeted attacks
-   - **Location**: Multiple handlers
-   - **Status**: PRESENT IN CODE
-   - **Recommendation**: Use generic "Authentication failed" messages
+4. **User Enumeration via Error Messages** ✅ **COMPLETE** (2025-11-18)
+   - **Issue**: ~~"User not found" messages reveal email existence~~ **FIXED**
+   - **Impact**: MEDIUM - Prevented targeted attacks
+   - **Location**: `connector/local-enhanced/handlers.go`
+   - **Status**: ✅ **IMPLEMENTED**
+   - **Implementation**:
+     - Passkey login begin returns generic "Authentication failed" (HTTP 401) instead of "User not found" (HTTP 404)
+     - Magic link send always returns success with generic message "If an account exists with this email, a magic link has been sent"
+     - Email sending failures return success to client (logged server-side only)
+     - All tests updated to verify generic error messages
+   - **Files Modified**:
+     - `handlers.go` - Updated handlePasskeyLoginBegin and handleMagicLinkSend error handling
+     - `handlers_test.go` - Updated test expectations (404 → 401)
+     - `handlers_magiclink_test.go` - Updated test expectations (500 → 200 for enumeration prevention)
 
 #### ⚠️ MEDIUM PRIORITY - Fix Before Production
 

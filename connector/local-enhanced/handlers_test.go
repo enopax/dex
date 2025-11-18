@@ -569,11 +569,11 @@ func TestHandlePasskeyLoginBegin(t *testing.T) {
 			validateResp:   nil,
 		},
 		{
-			name:           "user not found",
+			name:           "user not found (returns unauthorized to prevent enumeration)",
 			method:         http.MethodPost,
 			requestBody:    PasskeyAuthenticateBeginRequest{Email: "nonexistent@example.com"},
 			passkeyEnabled: true,
-			expectedStatus: http.StatusNotFound,
+			expectedStatus: http.StatusUnauthorized, // Changed from 404 to 401 for security
 			validateResp:   nil,
 		},
 	}

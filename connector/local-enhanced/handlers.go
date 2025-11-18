@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/go-webauthn/webauthn/protocol"
 )
@@ -144,12 +145,9 @@ func (c *Connector) handlePasskeyLoginBegin(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		c.logger.Errorf("failed to begin passkey authentication: %v", err)
 
-		// Provide more specific error messages
-		if err.Error() == "user not found: user not found" {
-			http.Error(w, "User not found", http.StatusNotFound)
-		} else {
-			http.Error(w, "Failed to begin authentication", http.StatusInternalServerError)
-		}
+		// Return generic error to prevent user enumeration
+		// Do not reveal if user exists or not
+		http.Error(w, "Authentication failed", http.StatusUnauthorized)
 		return
 	}
 
@@ -936,8 +934,23 @@ func (c *Connector) handleMagicLinkSend(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Create magic link token
+	// Note: We always return success to prevent user enumeration
+	// If the user doesn't exist, we log it but still return success to the client
 	token, err := c.CreateMagicLink(ctx, req.Email, req.Callback, req.State, ipAddress)
 	if err != nil {
+		// Check if this is a "user not found" error
+		if strings.Contains(err.Error(), "user not found") {
+			// User doesn't exist - return success anyway to prevent enumeration
+			c.logger.Infof("handleMagicLinkSend: user not found for email %s (returned success to prevent enumeration)", req.Email)
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": true,
+				"message": "If an account exists with this email, a magic link has been sent",
+			})
+			return
+		}
+
+		// Other errors are genuine failures
 		c.logger.Errorf("handleMagicLinkSend: failed to create magic link: %v", err)
 		http.Error(w, "Failed to create magic link", http.StatusInternalServerError)
 		return
@@ -949,7 +962,13 @@ func (c *Connector) handleMagicLinkSend(w http.ResponseWriter, r *http.Request) 
 	// Send email
 	if err := c.SendMagicLinkEmail(ctx, req.Email, magicLinkURL); err != nil {
 		c.logger.Errorf("handleMagicLinkSend: failed to send email: %v", err)
-		http.Error(w, "Failed to send magic link email", http.StatusInternalServerError)
+		// Don't reveal email sending failure to prevent enumeration
+		// Return success to the client
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
+			"message": "If an account exists with this email, a magic link has been sent",
+		})
 		return
 	}
 
@@ -959,7 +978,7 @@ func (c *Connector) handleMagicLinkSend(w http.ResponseWriter, r *http.Request) 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
-		"message": fmt.Sprintf("Magic link sent to %s", req.Email),
+		"message": "If an account exists with this email, a magic link has been sent",
 	})
 }
 

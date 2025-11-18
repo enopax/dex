@@ -932,9 +932,19 @@ func hashPassword(password string) (string, error) {
   - Automatic reset on successful authentication
   - Cleanup goroutine to prevent memory leaks
   - Comprehensive test suite (9 test functions, all passing)
-- [ ] Add HTTPS validation for magic link URLs
-- [ ] Fix user enumeration in error messages
-- [ ] Add HTTPS validation for WebAuthn RPOrigins
+- [x] Add HTTPS validation for magic link URLs ✅ **COMPLETE** (2025-11-18)
+  - BaseURL configuration requires HTTPS
+  - Config validation prevents HTTP URLs (except localhost)
+  - Comprehensive tests added
+- [x] Fix user enumeration in error messages ✅ **COMPLETE** (2025-11-18)
+  - Passkey login begin returns generic "Authentication failed" instead of "User not found"
+  - Magic link send always returns success (prevents enumeration via email existence)
+  - Email sending failures return success to client (logged server-side)
+  - Tests updated to verify generic error messages
+- [x] Add HTTPS validation for WebAuthn RPOrigins ✅ **COMPLETE** (2025-11-18)
+  - RPOrigins configuration requires HTTPS
+  - Config validation prevents HTTP URLs (except localhost)
+  - Comprehensive tests for all validation scenarios
 - [ ] Document environment variable security best practices
 
 ### Before Production Release

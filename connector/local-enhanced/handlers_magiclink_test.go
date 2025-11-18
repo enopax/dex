@@ -49,7 +49,7 @@ func TestHandleMagicLinkSend(t *testing.T) {
 			expectEmail:    true,
 			checkResponse: func(t *testing.T, resp map[string]interface{}) {
 				assert.Equal(t, true, resp["success"])
-				assert.Contains(t, resp["message"], "Magic link sent")
+				assert.Contains(t, resp["message"], "If an account exists")
 			},
 		},
 		{
@@ -109,7 +109,7 @@ func TestHandleMagicLinkSend(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
-			name:        "user not found",
+			name:        "user not found (returns success to prevent enumeration)",
 			method:      http.MethodPost,
 			enableMagic: true,
 			requestBody: map[string]interface{}{
@@ -117,7 +117,7 @@ func TestHandleMagicLinkSend(t *testing.T) {
 				"callback": "https://dex.example.com/callback",
 				"state":    "test-state",
 			},
-			expectedStatus: http.StatusInternalServerError,
+			expectedStatus: http.StatusOK, // Changed from 500 to 200 for security
 		},
 		{
 			name:        "rate limit exceeded",
@@ -143,7 +143,7 @@ func TestHandleMagicLinkSend(t *testing.T) {
 			expectedStatus: http.StatusTooManyRequests,
 		},
 		{
-			name:        "email sending failure",
+			name:        "email sending failure (returns success to prevent enumeration)",
 			method:      http.MethodPost,
 			enableMagic: true,
 			requestBody: map[string]interface{}{
@@ -162,7 +162,7 @@ func TestHandleMagicLinkSend(t *testing.T) {
 				mockSender := &FailingEmailSender{}
 				c.SetEmailSender(mockSender)
 			},
-			expectedStatus: http.StatusInternalServerError,
+			expectedStatus: http.StatusOK, // Changed from 500 to 200 for security
 		},
 		{
 			name:        "invalid JSON body",
