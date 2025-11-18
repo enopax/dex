@@ -167,6 +167,11 @@ func (c *Connector) CreateMagicLink(ctx context.Context, email, callbackURL, sta
 		return nil, fmt.Errorf("invalid email: %w", err)
 	}
 
+	// Check rate limit
+	if !c.magicLinkRateLimiter.Allow(email) {
+		return nil, fmt.Errorf("rate limit exceeded")
+	}
+
 	// Get or create user by email
 	user, err := c.storage.GetUserByEmail(ctx, email)
 	if err != nil {
