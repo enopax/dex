@@ -333,7 +333,8 @@ connector/local-enhanced/
 ├── config.go             # Configuration ✅
 ├── validation.go         # Validation functions ✅
 ├── password.go           # Password auth (TODO)
-├── passkey.go            # WebAuthn passkey (TODO)
+├── passkey.go            # WebAuthn passkey ✅
+├── passkey_test.go       # Passkey tests ✅
 ├── totp.go               # TOTP 2FA (TODO)
 ├── magiclink.go          # Magic link auth (TODO)
 ├── storage.go            # Storage interface ✅
@@ -392,6 +393,74 @@ if err := ValidateUsername(username); err != nil {
 - **Email**: Valid RFC 5322 format with domain containing at least one dot
 - **Password**: 8-128 characters, at least one letter and one number
 - **Username**: 3-64 characters, alphanumeric/hyphens/underscores, starts with letter
+
+---
+
+### WebAuthn Passkey Implementation (Phase 2 Week 5 - COMPLETE)
+
+**Location**: `connector/local-enhanced/passkey.go`
+
+**Key Components Implemented**:
+
+1. **WebAuthn User Interface** - Required methods for go-webauthn library:
+   - `WebAuthnID()` - Returns user ID as bytes
+   - `WebAuthnName()` - Returns username or email
+   - `WebAuthnDisplayName()` - Returns display name for authenticator UI
+   - `WebAuthnIcon()` - Returns user avatar URL (currently empty)
+   - `WebAuthnCredentials()` - Returns all passkey credentials for the user
+
+2. **Passkey Registration Flow**:
+   - `BeginPasskeyRegistration(ctx, user)` - Generates registration challenge and options
+   - `FinishPasskeyRegistration(ctx, sessionID, response, passkeyName)` - Verifies and stores new passkey
+   - Creates WebAuthn session with 5-minute TTL
+   - Validates attestation and stores credential
+
+3. **Passkey Authentication Flow**:
+   - `BeginPasskeyAuthentication(ctx, email)` - Generates authentication challenge
+   - `FinishPasskeyAuthentication(ctx, sessionID, response)` - Verifies signature and authenticates user
+   - Supports discoverable credentials (resident keys)
+   - Implements clone detection via sign counter validation
+   - Updates last login timestamp
+
+4. **Security Features**:
+   - Cryptographically secure challenge generation (32 bytes)
+   - Session-based CSRF protection
+   - Sign counter validation for clone detection
+   - 5-minute session expiry
+   - Base64 URL-safe encoding
+
+5. **Helper Functions**:
+   - `generateChallenge()` - Creates random 32-byte challenge
+   - `generateSessionID()` - Creates unique session identifier
+   - `getUserByPasskeyID(ctx, credentialID)` - Finds user by credential ID
+   - `convertTransports()` - Converts transport types
+   - `transportStrings()` - Converts transport enums to strings
+
+**Testing** (`passkey_test.go`):
+- WebAuthn interface implementation tests
+- Challenge generation tests
+- Session ID generation tests
+- Begin registration flow tests
+- Begin authentication flow tests
+- Transport conversion tests
+- User lookup by passkey ID tests
+
+**Configuration**:
+```go
+Passkey: PasskeyConfig{
+    Enabled:          true,
+    RPID:             "auth.enopax.io",
+    RPName:           "Enopax",
+    RPOrigins:        []string{"https://auth.enopax.io"},
+    UserVerification: "preferred",
+}
+```
+
+**Next Steps** (Phase 2 Week 6):
+- Implement HTTP endpoints for passkey registration/authentication
+- Create HTML templates for passkey UI
+- Add finish registration/authentication handlers
+- Integrate with OAuth flow
 
 ---
 

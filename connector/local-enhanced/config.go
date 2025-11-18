@@ -3,6 +3,8 @@ package local
 import (
 	"errors"
 	"fmt"
+
+	"github.com/sirupsen/logrus"
 )
 
 // Config holds the configuration for the enhanced local connector.
@@ -230,21 +232,17 @@ func (c *Config) Open(id string, logger interface{}) (interface{}, error) {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
-	// Create logger
-	log, ok := logger.(interface {
-		WithField(key string, value interface{}) interface{}
-	})
+	// Convert logger to logrus.FieldLogger
+	log, ok := logger.(logrus.FieldLogger)
 	if !ok {
-		return nil, errors.New("invalid logger type")
+		return nil, errors.New("invalid logger type: expected logrus.FieldLogger")
 	}
 
+	// Create a scoped logger with connector ID
+	scopedLogger := log.WithField("connector", id)
+
 	// Create connector
-	conn, err := New(c, log.WithField("connector", id).(interface {
-		Debugf(format string, args ...interface{})
-		Infof(format string, args ...interface{})
-		Warnf(format string, args ...interface{})
-		Errorf(format string, args ...interface{})
-	}))
+	conn, err := New(c, scopedLogger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create connector: %w", err)
 	}

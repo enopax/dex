@@ -5,12 +5,12 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
 
@@ -66,11 +66,14 @@ func DefaultTestConfig(t *testing.T) *TestConfig {
 	}
 }
 
-// TestLogger creates a logger suitable for testing
-func TestLogger(t *testing.T) *slog.Logger {
-	return slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
-	}))
+// TestLogger creates a logrus logger suitable for testing
+func TestLogger(t *testing.T) *logrus.Logger {
+	logger := logrus.New()
+	logger.SetLevel(logrus.DebugLevel)
+	logger.SetFormatter(&logrus.TextFormatter{
+		FullTimestamp: true,
+	})
+	return logger
 }
 
 // TestUser represents a test user with various authentication methods
@@ -108,10 +111,10 @@ func NewTestUser(email string) *TestUser {
 }
 
 // generateTestUserID generates a deterministic user ID for testing
+// This must match the production generateUserID function in storage.go
 func generateTestUserID(email string) string {
-	// For testing, we'll use a simple approach
-	// In production, this would be a SHA-256 hash converted to UUID format
-	return fmt.Sprintf("test-user-%s", base64.RawURLEncoding.EncodeToString([]byte(email))[:16])
+	// Use the same logic as production
+	return generateUserID(email)
 }
 
 // TestPasskey represents a test WebAuthn passkey credential
@@ -372,5 +375,83 @@ func (m *MockEmailSender) Reset() {
 func NewMockEmailSender() *MockEmailSender {
 	return &MockEmailSender{
 		SentEmails: []MockEmail{},
+	}
+}
+
+// ToUser converts a TestUser to a User (for storage operations)
+func (tu *TestUser) ToUser() *User {
+	user := &User{
+		ID:               tu.ID,
+		Email:            tu.Email,
+		Username:         tu.Username,
+		DisplayName:      tu.DisplayName,
+		EmailVerified:    tu.EmailVerified,
+		TOTPEnabled:      tu.TOTPEnabled,
+		MagicLinkEnabled: tu.MagicLinkEnabled,
+		Require2FA:       tu.Require2FA,
+		CreatedAt:        tu.CreatedAt,
+		UpdatedAt:        tu.UpdatedAt,
+	}
+
+	if tu.PasswordHash != "" {
+		user.PasswordHash = &tu.PasswordHash
+	}
+
+	if tu.TOTPSecret != "" {
+		user.TOTPSecret = &tu.TOTPSecret
+	}
+
+	if !tu.LastLoginAt.IsZero() {
+		user.LastLoginAt = &tu.LastLoginAt
+	}
+
+	return user
+}
+
+// ToPasskey converts a TestPasskey to a Passkey (for storage operations)
+func (tp *TestPasskey) ToPasskey() *Passkey {
+	passkey := &Passkey{
+		ID:              tp.ID,
+		UserID:          tp.UserID,
+		PublicKey:       tp.PublicKey,
+		AttestationType: tp.AttestationType,
+		AAGUID:          tp.AAGUID,
+		SignCount:       tp.SignCount,
+		Transports:      tp.Transports,
+		Name:            tp.Name,
+		CreatedAt:       tp.CreatedAt,
+		BackupEligible:  tp.BackupEligible,
+		BackupState:     tp.BackupState,
+	}
+
+	if !tp.LastUsedAt.IsZero() {
+		passkey.LastUsedAt = &tp.LastUsedAt
+	}
+
+	return passkey
+}
+
+// ToWebAuthnSession converts a TestWebAuthnSession to a WebAuthnSession
+func (ts *TestWebAuthnSession) ToWebAuthnSession() *WebAuthnSession {
+	return &WebAuthnSession{
+		SessionID: ts.SessionID,
+		UserID:    ts.UserID,
+		Challenge: ts.Challenge,
+		Operation: ts.Operation,
+		ExpiresAt: ts.ExpiresAt,
+		CreatedAt: time.Now(),
+	}
+}
+
+// ToMagicLinkToken converts a TestMagicLinkToken to a MagicLinkToken
+func (tm *TestMagicLinkToken) ToMagicLinkToken() *MagicLinkToken {
+	return &MagicLinkToken{
+		Token:     tm.Token,
+		UserID:    tm.UserID,
+		Email:     tm.Email,
+		CreatedAt: tm.CreatedAt,
+		ExpiresAt: tm.ExpiresAt,
+		Used:      tm.Used,
+		IPAddress: tm.IPAddress,
 	}
 }

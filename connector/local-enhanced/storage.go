@@ -131,11 +131,9 @@ func (s *FileStorage) GetUser(ctx context.Context, userID string) (*User, error)
 
 // GetUserByEmail retrieves a user by email address.
 func (s *FileStorage) GetUserByEmail(ctx context.Context, email string) (*User, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
 	// Generate deterministic user ID from email
 	userID := generateUserID(email)
+	// Call GetUser directly - it will acquire its own lock
 	return s.GetUser(ctx, userID)
 }
 

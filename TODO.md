@@ -242,48 +242,28 @@ This implementation plan covers building an **Enhanced Local Connector** for Dex
 ### Week 4: Storage Backend
 
 #### File Storage Implementation
-- [ ] Implement file-based storage backend
-- [ ] User file operations (create, read, update, delete)
-- [ ] Passkey file operations
-- [ ] Session storage for WebAuthn challenges
-- [ ] Magic link token storage
+- [x] Implement file-based storage backend (connector/local-enhanced/storage.go)
+- [x] User file operations (create, read, update, delete, list)
+- [x] Passkey file operations (save, get, list, delete)
+- [x] Session storage for WebAuthn challenges (save, get, delete)
+- [x] Magic link token storage (save, get, delete)
 
 #### Storage Interface
-- [ ] Define Storage interface:
-  ```go
-  type Storage interface {
-      // User operations
-      CreateUser(ctx context.Context, user *User) error
-      GetUser(ctx context.Context, userID string) (*User, error)
-      GetUserByEmail(ctx context.Context, email string) (*User, error)
-      UpdateUser(ctx context.Context, user *User) error
-      DeleteUser(ctx context.Context, userID string) error
+- [x] Define Storage interface with all operations
+- [x] Implement file-based storage (FileStorage struct)
+- [x] Add atomic file operations (using temp files + rename)
+- [x] Implement file locking for concurrent access (using syscall.Flock)
+- [x] Write comprehensive tests (storage_test.go - 84.1% coverage)
 
-      // Passkey operations
-      SavePasskey(ctx context.Context, passkey *Passkey) error
-      GetPasskey(ctx context.Context, credentialID string) (*Passkey, error)
-      ListPasskeys(ctx context.Context, userID string) ([]*Passkey, error)
-      DeletePasskey(ctx context.Context, credentialID string) error
-
-      // Session operations
-      SaveWebAuthnSession(ctx context.Context, session *WebAuthnSession) error
-      GetWebAuthnSession(ctx context.Context, sessionID string) (*WebAuthnSession, error)
-      DeleteWebAuthnSession(ctx context.Context, sessionID string) error
-  }
-  ```
-
-- [ ] Implement file-based storage
-- [ ] Add atomic file operations
-- [ ] Implement file locking for concurrent access
-- [ ] Write comprehensive tests
-
-#### Migration Support
+#### Migration Support (DEFERRED)
 - [ ] Implement migration from old password-only storage
 - [ ] Create migration tool/script
 - [ ] Document migration process
 - [ ] Test migration with sample data
 
-**Deliverable**: Storage backend complete with migration support
+> **Note**: Migration support deferred until production deployment. Not needed for initial implementation since there are no existing users to migrate.
+
+**Deliverable**: Storage backend complete ✅ (Migration deferred)
 
 ---
 
@@ -292,7 +272,7 @@ This implementation plan covers building an **Enhanced Local Connector** for Dex
 ### Week 5: WebAuthn Library Integration
 
 #### WebAuthn Setup
-- [ ] Initialize WebAuthn library:
+- [x] Initialize WebAuthn library:
   ```go
   import "github.com/go-webauthn/webauthn/webauthn"
 
@@ -303,7 +283,7 @@ This implementation plan covers building an **Enhanced Local Connector** for Dex
   })
   ```
 
-- [ ] Implement User interface for WebAuthn:
+- [x] Implement User interface for WebAuthn:
   ```go
   func (u *User) WebAuthnID() []byte
   func (u *User) WebAuthnName() string
@@ -312,12 +292,12 @@ This implementation plan covers building an **Enhanced Local Connector** for Dex
   func (u *User) WebAuthnCredentials() []webauthn.Credential
   ```
 
-- [ ] Configure RP ID and origins
-- [ ] Set up challenge generation
-- [ ] Write unit tests
+- [x] Configure RP ID and origins
+- [x] Set up challenge generation
+- [x] Write unit tests
 
 #### Session Management
-- [ ] Implement WebAuthn session storage:
+- [x] Implement WebAuthn session storage:
   ```go
   type WebAuthnSession struct {
       SessionID   string
@@ -328,11 +308,11 @@ This implementation plan covers building an **Enhanced Local Connector** for Dex
   }
   ```
 
-- [ ] Add session creation and validation
-- [ ] Implement session cleanup (TTL: 5 minutes)
-- [ ] Write tests
+- [x] Add session creation and validation
+- [x] Implement session cleanup (TTL: 5 minutes)
+- [x] Write tests
 
-**Deliverable**: WebAuthn library integrated, sessions working
+**Deliverable**: WebAuthn library integrated, sessions working ✅
 
 ---
 
