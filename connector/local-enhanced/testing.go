@@ -482,3 +482,10 @@ func (tm *TestMagicLinkToken) ToMagicLinkToken() *MagicLinkToken {
 func stringPtr(s string) *string {
 	return &s
 }
+
+// GenerateTestID generates a random unique ID for testing
+func GenerateTestID() string {
+	idBytes := make([]byte, 16)
+	rand.Read(idBytes)
+	return base64.RawURLEncoding.EncodeToString(idBytes)
+}

@@ -779,34 +779,36 @@ Add to `handlers_test.go`:
 
 Add to `storage_test.go`:
 
-- [ ] Test `Save2FASession`:
-  - [ ] Creates file in 2fa-sessions/ directory
-  - [ ] File has correct permissions (0600)
-  - [ ] Session data serialized correctly
-  - [ ] Concurrent saves work correctly
+- [x] Test `Save2FASession`: ✅ COMPLETE (2025-11-18)
+  - [x] Creates file in 2fa-sessions/ directory
+  - [x] File has correct permissions (0600)
+  - [x] Session data serialized correctly
+  - [x] Concurrent saves work correctly
 
-- [ ] Test `Get2FASession`:
-  - [ ] Retrieves session correctly
-  - [ ] Returns error for non-existent session
-  - [ ] Returns error for expired session
-  - [ ] Validates session structure
+- [x] Test `Get2FASession`: ✅ COMPLETE (2025-11-18)
+  - [x] Retrieves session correctly
+  - [x] Returns error for non-existent session
+  - [x] Returns error for expired session
+  - [x] Validates session structure
 
-- [ ] Test `Delete2FASession`:
-  - [ ] Removes session file
-  - [ ] No error if file doesn't exist
-  - [ ] Subsequent Get returns error
+- [x] Test `Delete2FASession`: ✅ COMPLETE (2025-11-18)
+  - [x] Removes session file
+  - [x] No error if file doesn't exist
+  - [x] Subsequent Get returns error
 
-- [ ] Test `CleanupExpiredSessions` (2FA sessions):
-  - [ ] Removes expired 2FA sessions
-  - [ ] Keeps non-expired sessions
-  - [ ] Works with concurrent sessions
+- [x] Test `CleanupExpiredSessions` (2FA sessions): ✅ COMPLETE (2025-11-18)
+  - [x] Removes expired 2FA sessions
+  - [x] Keeps non-expired sessions
+  - [x] Works with concurrent sessions
 
 **Success Criteria**:
 - ✅ All 2FA core functions have unit tests - COMPLETE
 - ✅ HTTP handlers have dedicated tests - COMPLETE (need minor adjustments for actual behavior)
 - ⚠️ Integration tests for full flows - PENDING (Week 10)
 - ✅ All unit tests passing - 6 test functions, 27 sub-tests
-- ⚠️ Overall coverage at 62.6% (target: >70%) - needs integration tests
+- ✅ Storage tests for 2FA sessions - COMPLETE (4 test functions, all passing)
+- ✅ Overall coverage improved to 68.5% (from 62.6%) - 5.9 percentage point increase
+- ⚠️ gRPC tests fixed - all 12 gRPC test functions now passing
 
 **Deliverable**: ✅ Core 2FA functionality fully tested with unit tests + HTTP handler test structure implemented
 

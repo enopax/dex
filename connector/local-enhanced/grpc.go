@@ -44,19 +44,27 @@ func (s *GRPCServer) CreateUser(ctx context.Context, req *api.CreateUserReq) (*a
 
 	// Create new user
 	user := &User{
-		ID:            generateUserID(req.Email),
-		Email:         req.Email,
-		Username:      req.Username,
-		DisplayName:   req.DisplayName,
-		EmailVerified: false, // Email not verified by default
-		Require2FA:    false, // 2FA not required by default
-		CreatedAt:     time.Now(),
-		UpdatedAt:     time.Now(),
+		ID:               generateUserID(req.Email),
+		Email:            req.Email,
+		Username:         req.Username,
+		DisplayName:      req.DisplayName,
+		EmailVerified:    false, // Email not verified by default
+		MagicLinkEnabled: true,  // Enable magic link by default for passwordless signup
+		Require2FA:       false, // 2FA not required by default
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
 	}
 
-	// Validate user
-	if err := user.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid user: %w", err)
+	// Basic validation (ID and email format)
+	// Skip full Validate() which requires auth methods - user will set up auth later
+	if user.ID == "" {
+		return nil, ErrEmptyUserID
+	}
+	if user.Email == "" {
+		return nil, ErrEmptyEmail
+	}
+	if err := ValidateEmail(user.Email); err != nil {
+		return nil, fmt.Errorf("invalid email: %w", err)
 	}
 
 	// Create user

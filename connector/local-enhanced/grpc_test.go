@@ -244,9 +244,14 @@ func TestGRPCServer_RemovePassword(t *testing.T) {
 	ctx := TestContext(t)
 
 	// Create test user with password
-	user := NewTestUser("alice@example.com")
-	require.NoError(t, connector.SetPassword(ctx, user.ToUser(), "SecurePass123"))
-	require.NoError(t, connector.storage.CreateUser(ctx, user.ToUser()))
+	testUser := NewTestUser("alice@example.com")
+	user := testUser.ToUser()
+	require.NoError(t, connector.storage.CreateUser(ctx, user))
+
+	// Reload user and set password
+	user, err := connector.storage.GetUser(ctx, user.ID)
+	require.NoError(t, err)
+	require.NoError(t, connector.SetPassword(ctx, user, "SecurePass123"))
 
 	t.Run("remove password", func(t *testing.T) {
 		resp, err := server.RemovePassword(ctx, &api.RemovePasswordReq{
@@ -296,12 +301,14 @@ func TestGRPCServer_EnableTOTP(t *testing.T) {
 	})
 
 	t.Run("TOTP already enabled", func(t *testing.T) {
-		// Enable TOTP first
-		user.TOTPEnabled = true
-		require.NoError(t, connector.storage.CreateUser(ctx, user.ToUser()))
+		// Create another user with TOTP enabled
+		userWithTOTP := NewTestUser("bob@example.com")
+		userObj := userWithTOTP.ToUser()
+		userObj.TOTPEnabled = true
+		require.NoError(t, connector.storage.CreateUser(ctx, userObj))
 
 		resp, err := server.EnableTOTP(ctx, &api.EnableTOTPReq{
-			UserId: user.ID,
+			UserId: userObj.ID,
 		})
 		require.NoError(t, err)
 		assert.True(t, resp.AlreadyEnabled)
@@ -445,11 +452,18 @@ func TestGRPCServer_GetAuthMethods(t *testing.T) {
 	// Create test user with multiple auth methods
 	testUser := NewTestUser("alice@example.com")
 	user := testUser.ToUser()
+	// Create user first, then add auth methods
+	require.NoError(t, connector.storage.CreateUser(ctx, user))
+
+	// Reload user from storage to get fresh copy
+	user, err := connector.storage.GetUser(ctx, user.ID)
+	require.NoError(t, err)
+
 	require.NoError(t, connector.SetPassword(ctx, user, "SecurePass123"))
 	passkey := NewTestPasskey(user.ID, "Test Key")
 	user.Passkeys = []Passkey{*passkey.ToPasskey()}
 	user.TOTPEnabled = true
-	require.NoError(t, connector.storage.CreateUser(ctx, user))
+	require.NoError(t, connector.storage.UpdateUser(ctx, user))
 
 	t.Run("get auth methods", func(t *testing.T) {
 		resp, err := server.GetAuthMethods(ctx, &api.GetAuthMethodsReq{

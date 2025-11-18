@@ -477,3 +477,305 @@ func TestGenerateSessionID(t *testing.T) {
 	// Session ID should be 64 hex characters (32 bytes)
 	assert.Len(t, sessionID1, 64)
 }
+
+// TestSave2FASession tests saving 2FA sessions to storage.
+func TestSave2FASession(t *testing.T) {
+	dataDir := SetupTestStorage(t)
+	defer CleanupTestStorage(t, dataDir)
+
+	storage, err := NewFileStorage(dataDir)
+	require.NoError(t, err)
+
+	ctx := TestContext(t)
+
+	// Create test 2FA session
+	session := &TwoFactorSession{
+		SessionID:     "test-session-id",
+		UserID:        "test-user-id",
+		PrimaryMethod: "password",
+		CreatedAt:     time.Now(),
+		ExpiresAt:     time.Now().Add(10 * time.Minute),
+		Completed:     false,
+		CallbackURL:   "https://example.com/callback",
+		State:         "test-state",
+	}
+
+	// Save session
+	err = storage.Save2FASession(ctx, session)
+	require.NoError(t, err)
+
+	// Verify file was created
+	sessionPath := filepath.Join(dataDir, "2fa-sessions", session.SessionID+".json")
+	AssertFileExists(t, sessionPath)
+	AssertFilePermissions(t, sessionPath, 0600)
+
+	// Test concurrent saves
+	t.Run("concurrent saves work correctly", func(t *testing.T) {
+		done := make(chan bool, 5)
+
+		for i := 0; i < 5; i++ {
+			go func(id int) {
+				session := &TwoFactorSession{
+					SessionID:     GenerateTestID(),
+					UserID:        "test-user-id",
+					PrimaryMethod: "password",
+					CreatedAt:     time.Now(),
+					ExpiresAt:     time.Now().Add(10 * time.Minute),
+					Completed:     false,
+					CallbackURL:   "https://example.com/callback",
+					State:         "test-state",
+				}
+				err := storage.Save2FASession(ctx, session)
+				assert.NoError(t, err)
+				done <- true
+			}(i)
+		}
+
+		// Wait for all goroutines
+		for i := 0; i < 5; i++ {
+			<-done
+		}
+	})
+}
+
+// TestGet2FASession tests retrieving 2FA sessions from storage.
+func TestGet2FASession(t *testing.T) {
+	dataDir := SetupTestStorage(t)
+	defer CleanupTestStorage(t, dataDir)
+
+	storage, err := NewFileStorage(dataDir)
+	require.NoError(t, err)
+
+	ctx := TestContext(t)
+
+	// Create and save test session
+	session := &TwoFactorSession{
+		SessionID:     "test-session-id",
+		UserID:        "test-user-id",
+		PrimaryMethod: "password",
+		CreatedAt:     time.Now(),
+		ExpiresAt:     time.Now().Add(10 * time.Minute),
+		Completed:     false,
+		CallbackURL:   "https://example.com/callback",
+		State:         "test-state",
+	}
+	err = storage.Save2FASession(ctx, session)
+	require.NoError(t, err)
+
+	t.Run("retrieves session correctly", func(t *testing.T) {
+		retrieved, err := storage.Get2FASession(ctx, session.SessionID)
+		require.NoError(t, err)
+		assert.NotNil(t, retrieved)
+		assert.Equal(t, session.SessionID, retrieved.SessionID)
+		assert.Equal(t, session.UserID, retrieved.UserID)
+		assert.Equal(t, session.PrimaryMethod, retrieved.PrimaryMethod)
+		assert.Equal(t, session.CallbackURL, retrieved.CallbackURL)
+		assert.Equal(t, session.State, retrieved.State)
+		assert.False(t, retrieved.Completed)
+	})
+
+	t.Run("returns error for non-existent session", func(t *testing.T) {
+		_, err := storage.Get2FASession(ctx, "nonexistent")
+		require.Error(t, err)
+	})
+
+	t.Run("returns error for expired session", func(t *testing.T) {
+		// Create expired session
+		expiredSession := &TwoFactorSession{
+			SessionID:     "expired-session",
+			UserID:        "test-user-id",
+			PrimaryMethod: "password",
+			CreatedAt:     time.Now().Add(-20 * time.Minute),
+			ExpiresAt:     time.Now().Add(-1 * time.Second), // Expired 1 second ago
+			Completed:     false,
+			CallbackURL:   "https://example.com/callback",
+			State:         "test-state",
+		}
+		err = storage.Save2FASession(ctx, expiredSession)
+		require.NoError(t, err)
+
+		// Get2FASession returns Err2FASessionNotFound for expired sessions
+		_, err = storage.Get2FASession(ctx, expiredSession.SessionID)
+		require.Error(t, err)
+		assert.Equal(t, Err2FASessionNotFound, err)
+	})
+
+	t.Run("validates session structure", func(t *testing.T) {
+		retrieved, err := storage.Get2FASession(ctx, session.SessionID)
+		require.NoError(t, err)
+
+		// Verify all required fields are present
+		assert.NotEmpty(t, retrieved.SessionID)
+		assert.NotEmpty(t, retrieved.UserID)
+		assert.NotEmpty(t, retrieved.PrimaryMethod)
+		assert.NotZero(t, retrieved.CreatedAt)
+		assert.NotZero(t, retrieved.ExpiresAt)
+	})
+}
+
+// TestDelete2FASession tests deleting 2FA sessions from storage.
+func TestDelete2FASession(t *testing.T) {
+	dataDir := SetupTestStorage(t)
+	defer CleanupTestStorage(t, dataDir)
+
+	storage, err := NewFileStorage(dataDir)
+	require.NoError(t, err)
+
+	ctx := TestContext(t)
+
+	// Create and save test session
+	session := &TwoFactorSession{
+		SessionID:     "test-session-id",
+		UserID:        "test-user-id",
+		PrimaryMethod: "password",
+		CreatedAt:     time.Now(),
+		ExpiresAt:     time.Now().Add(10 * time.Minute),
+		Completed:     false,
+		CallbackURL:   "https://example.com/callback",
+		State:         "test-state",
+	}
+	err = storage.Save2FASession(ctx, session)
+	require.NoError(t, err)
+
+	t.Run("removes session file", func(t *testing.T) {
+		// Verify session exists
+		sessionPath := filepath.Join(dataDir, "2fa-sessions", session.SessionID+".json")
+		AssertFileExists(t, sessionPath)
+
+		// Delete session
+		err = storage.Delete2FASession(ctx, session.SessionID)
+		require.NoError(t, err)
+
+		// Verify file was removed
+		AssertFileNotExists(t, sessionPath)
+	})
+
+	t.Run("no error if file doesn't exist", func(t *testing.T) {
+		// Delete non-existent session - should not error
+		err = storage.Delete2FASession(ctx, "nonexistent")
+		require.NoError(t, err)
+	})
+
+	t.Run("subsequent Get returns error", func(t *testing.T) {
+		// Create session
+		session2 := &TwoFactorSession{
+			SessionID:     "test-session-2",
+			UserID:        "test-user-id",
+			PrimaryMethod: "password",
+			CreatedAt:     time.Now(),
+			ExpiresAt:     time.Now().Add(10 * time.Minute),
+			Completed:     false,
+			CallbackURL:   "https://example.com/callback",
+			State:         "test-state",
+		}
+		err = storage.Save2FASession(ctx, session2)
+		require.NoError(t, err)
+
+		// Delete it
+		err = storage.Delete2FASession(ctx, session2.SessionID)
+		require.NoError(t, err)
+
+		// Try to get it - should error
+		_, err = storage.Get2FASession(ctx, session2.SessionID)
+		require.Error(t, err)
+	})
+}
+
+// TestCleanupExpired2FASessions tests cleanup of expired 2FA sessions.
+func TestCleanupExpired2FASessions(t *testing.T) {
+	dataDir := SetupTestStorage(t)
+	defer CleanupTestStorage(t, dataDir)
+
+	storage, err := NewFileStorage(dataDir)
+	require.NoError(t, err)
+
+	ctx := TestContext(t)
+
+	// Create expired session
+	expiredSession := &TwoFactorSession{
+		SessionID:     "expired-session",
+		UserID:        "test-user-id",
+		PrimaryMethod: "password",
+		CreatedAt:     time.Now().Add(-20 * time.Minute),
+		ExpiresAt:     time.Now().Add(-1 * time.Minute), // Expired 1 minute ago
+		Completed:     false,
+		CallbackURL:   "https://example.com/callback",
+		State:         "test-state",
+	}
+	err = storage.Save2FASession(ctx, expiredSession)
+	require.NoError(t, err)
+
+	// Create valid session
+	validSession := &TwoFactorSession{
+		SessionID:     "valid-session",
+		UserID:        "test-user-id",
+		PrimaryMethod: "password",
+		CreatedAt:     time.Now(),
+		ExpiresAt:     time.Now().Add(10 * time.Minute),
+		Completed:     false,
+		CallbackURL:   "https://example.com/callback",
+		State:         "test-state",
+	}
+	err = storage.Save2FASession(ctx, validSession)
+	require.NoError(t, err)
+
+	t.Run("removes expired sessions", func(t *testing.T) {
+		// Run cleanup
+		err = storage.CleanupExpiredSessions(ctx)
+		require.NoError(t, err)
+
+		// Expired session should be gone
+		expiredPath := filepath.Join(dataDir, "2fa-sessions", expiredSession.SessionID+".json")
+		AssertFileNotExists(t, expiredPath)
+	})
+
+	t.Run("keeps non-expired sessions", func(t *testing.T) {
+		// Valid session should still exist
+		validPath := filepath.Join(dataDir, "2fa-sessions", validSession.SessionID+".json")
+		AssertFileExists(t, validPath)
+
+		// Should be able to retrieve it
+		retrieved, err := storage.Get2FASession(ctx, validSession.SessionID)
+		require.NoError(t, err)
+		assert.Equal(t, validSession.SessionID, retrieved.SessionID)
+	})
+
+	t.Run("works with concurrent sessions", func(t *testing.T) {
+		// Create multiple sessions with different expiry times
+		for i := 0; i < 10; i++ {
+			var expiresAt time.Time
+			if i%2 == 0 {
+				// Even: expired
+				expiresAt = time.Now().Add(-1 * time.Minute)
+			} else {
+				// Odd: valid
+				expiresAt = time.Now().Add(10 * time.Minute)
+			}
+
+			session := &TwoFactorSession{
+				SessionID:     GenerateTestID(),
+				UserID:        "test-user-id",
+				PrimaryMethod: "password",
+				CreatedAt:     time.Now(),
+				ExpiresAt:     expiresAt,
+				Completed:     false,
+				CallbackURL:   "https://example.com/callback",
+				State:         "test-state",
+			}
+			err = storage.Save2FASession(ctx, session)
+			require.NoError(t, err)
+		}
+
+		// Cleanup
+		err = storage.CleanupExpiredSessions(ctx)
+		require.NoError(t, err)
+
+		// Count remaining sessions (should be ~5 valid ones plus the original valid session)
+		sessionsDir := filepath.Join(dataDir, "2fa-sessions")
+		files, err := filepath.Glob(filepath.Join(sessionsDir, "*.json"))
+		require.NoError(t, err)
+		// We expect at least 5-6 files (5 odd-numbered + 1 original valid session)
+		assert.GreaterOrEqual(t, len(files), 5)
+		assert.LessOrEqual(t, len(files), 6)
+	})
+}
