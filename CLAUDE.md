@@ -2661,11 +2661,11 @@ golangci-lint run
 
 ## Test Coverage Improvements (2025-11-18)
 
-**Status**: 🚧 IN PROGRESS - Week 13 storage tests complete, TOTP handler tests complete
+**Status**: ✅ PHASE 1 COMPLETE - Week 13 storage tests complete, TOTP handler tests complete, Magic link handler tests complete
 
 ### Achievements
 
-**Overall Coverage**: 73.1% (improved from 68.8% - a 4.3 percentage point increase, total increase from 62.6% is 10.5 percentage points)
+**Overall Coverage**: 77.0% (improved from 73.1% - a 3.9 percentage point increase, total increase from 62.6% is 14.4 percentage points)
 
 **Tests Fixed**:
 - ✅ All 12 gRPC test functions now passing (fixed user creation validation, RemovePassword setup, EnableTOTP user creation)
@@ -2728,6 +2728,12 @@ golangci-lint run
 - TestHandleTOTPVerify (6 test cases: valid code enables TOTP, invalid code, missing fields (4 sub-tests), user not found)
 - TestHandleTOTPValidate (7 test cases: valid TOTP code, invalid code, backup code fallback with marking as used, rate limiting, user without TOTP, missing user_id, missing code)
 
+**Magic Link Handler Tests**: 4/4 test functions passing ✅ (NEW - 2025-11-18 Session 2)
+- TestHandleMagicLinkSend (11 test cases: valid request sends email, method not allowed, magic links disabled, missing required fields (email/callback/state), invalid email format, user not found, rate limit exceeded, email sending failure, invalid JSON body)
+- TestHandleMagicLinkVerify (8 test cases: valid token redirects to callback, method not allowed, magic links disabled, missing token parameter, invalid token, expired token, already used token, 2FA required redirects to 2FA prompt)
+- TestHandleMagicLinkSend_Concurrent (3 concurrent requests within rate limit)
+- TestHandleMagicLinkVerify_RateLimiterReset (rate limiter reset after successful auth)
+
 **Still Failing** (not critical - deferred to handler adjustments):
 - TestHandle2FAPrompt (template rendering, status code differences)
 - TestHandle2FAVerifyTOTP (HTTP 303 vs expected 302/401)
@@ -2741,30 +2747,31 @@ These failing tests are structural issues with test assertions expecting differe
 **Comprehensive Coverage Report**: See `docs/enhancements/coverage-analysis.md` for detailed analysis
 
 **Summary**:
-- **Current Coverage**: 73.1% (5,186/7,093 statements)
-- **Target**: >80% (+6.9 percentage points needed)
-- **Critical Gaps**: Magic link handlers (0%), gRPC TOTP endpoints (0%)
+- **Current Coverage**: 77.0%
+- **Target**: >80% (+3.0 percentage points needed)
+- **Critical Gaps**: gRPC TOTP endpoints (VerifyTOTPSetup, DisableTOTP, GetTOTPInfo, RegenerateBackupCodes)
 
 **Improvement Plan**:
-- **Phase 1** (1-2 days): Test TOTP/Magic handlers → +6-8% → Target 75-77%
-  - ✅ TOTP handlers complete (+4.3%) - 2025-11-18
-  - 🚧 Magic link handlers pending
-- **Phase 2** (2-3 days): Integration tests → +3-5% → Target 78-82%
-- **Phase 3** (optional): Browser tests → +2-3% → Target 80-85%
+- **Phase 1** (1-2 days): Test TOTP/Magic handlers → Target 75-77%
+  - ✅ TOTP handlers complete (+4.3%) - 2025-11-18 Session 1
+  - ✅ Magic link handlers complete (+3.9%) - 2025-11-18 Session 2
+  - **PHASE 1 COMPLETE**: 77.0% coverage achieved
+- **Phase 2** (2-3 days): gRPC TOTP endpoints + Integration tests → Target >80%
+- **Phase 3** (optional): Browser tests → Target 82-85%
 
-**Next Priority**: Implement Magic Link handler tests (Phase 1 completion)
+**Next Priority**: Implement gRPC TOTP endpoint tests (Phase 2)
 
 **Coverage by Component**:
 - ✅ OAuth Integration: 100%
 - ✅ Storage Operations: 80-100%
 - ✅ Validation Functions: 84-100%
 - ✅ TOTP Core Logic: 90-100%
-- ✅ TOTP HTTP Handlers: 80%+ ✅ NEW (2025-11-18)
+- ✅ TOTP HTTP Handlers: 71-77% ✅ COMPLETE (2025-11-18 Session 1)
 - ✅ 2FA Policy Enforcement: 85%+
 - ✅ Magic Link Core Logic: 75-100%
-- ❌ Magic Link HTTP Handlers: 0%
-- ❌ gRPC TOTP Endpoints: 0%
-- ⚠️ Passkey Finish Flows: 18.5%, 12.8%
+- ✅ Magic Link HTTP Handlers: 91-98% ✅ COMPLETE (2025-11-18 Session 2)
+- ❌ gRPC TOTP Endpoints: 0% (VerifyTOTPSetup, DisableTOTP, GetTOTPInfo, RegenerateBackupCodes)
+- ⚠️ Passkey Finish Flows: 18.5%, 12.8% (requires browser/virtual authenticator)
 
 **Acceptable Low Coverage**:
 - Passkey finish functions (18.5%, 12.8%) - Session validation tested, cryptographic verification handled by go-webauthn library, full testing requires browser/virtual authenticator
