@@ -47,13 +47,32 @@ jobs:
 
       - name: Set image name
         id: image-name
-        run: echo "value=ghcr.io/${{ github.repository }}" >> "$GITHUB_OUTPUT"
+        # During the cutover to the org-wide package naming schema
+        # (enopax/enopax#15) we publish to BOTH the legacy path and the new
+        # namespaced path so existing consumers keep working:
+        #   - legacy: ghcr.io/<owner>/<repo>        (e.g. ghcr.io/enopax/dex)
+        #   - new:    ghcr.io/<owner>/images/<repo> (e.g. ghcr.io/enopax/images/dex)
+        # `value` remains the legacy path for backwards-compatible outputs;
+        # `new` is the namespaced path; `all` is the newline-separated list
+        # fed to docker/metadata-action so every tag is generated for both.
+        run: |
+          repo_name="${GITHUB_REPOSITORY##*/}"
+          legacy="ghcr.io/${GITHUB_REPOSITORY}"
+          namespaced="ghcr.io/${GITHUB_REPOSITORY_OWNER}/images/${repo_name}"
+          {
+            echo "value=${legacy}"
+            echo "new=${namespaced}"
+            echo "all<<EOF"
+            echo "${legacy}"
+            echo "${namespaced}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Gather build metadata
         id: meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
-          images: ${{ steps.image-name.outputs.value }}
+          images: ${{ steps.image-name.outputs.all }}
           flavor: |
             latest = false
           tags: |
@@ -103,6 +122,9 @@ jobs:
 
       - name: Set image ref
         id: image-ref
+        # Keep the legacy path as the canonical ref for downstream consumers
+        # (attestation, release notes) during the transition; the new
+        # namespaced path receives the same digest via the multi-image push.
         run: echo "value=${{ steps.image-name.outputs.value }}@${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT"
 
       - name: Extract OCI tarball
